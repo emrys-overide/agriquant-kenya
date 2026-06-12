@@ -1,0 +1,7 @@
+name = "agriquant-api"
+main = "src/index.py"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["python_workers"]
+
+[vars]
+WEATHER_API_KEY = "7bb7778e1e2b4ec5a7050654260506"

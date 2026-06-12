@@ -36,7 +36,10 @@ import {
 /*  Constants & Types                                                  */
 /* ------------------------------------------------------------------ */
 
-const API_URL = "/api";
+const API_URL =
+  process.env.NODE_ENV === "development"
+    ? "/api"
+    : "https://agriquant-api.emryspaul7.workers.dev/api";
 
 type Crop = "maize" | "tomatoes" | "cabbages" | "onions" | "french_beans" | "potatoes" | "wheat";
 
@@ -114,8 +117,8 @@ const translations: Record<string, { en: string; sw: string }> = {
   liveFromKamis: { en: "Live from KAMIS", sw: "Data hai kutoka KAMIS" },
   estimated: { en: "Estimated", sw: "Makadirio" },
   errorBackend: {
-    en: "Could not reach the backend. Please ensure the FastAPI server is running on port 8000.",
-    sw: "Haikuweza kufikia seva. Tafadhali hakikisha seva ya FastAPI inafanya kazi.",
+    en: "Could not reach the API server. Please check your internet connection and try again.",
+    sw: "Haikuweza kufikia seva ya API. Tafadhali angalia muunganisho wako wa intaneti na jaribu tena.",
   },
   chatGreeting: {
     en: "Hello! I'm Mkulima AI. Ask me anything about farming, weather, or market prices.",
