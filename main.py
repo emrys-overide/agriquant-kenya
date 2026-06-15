@@ -170,6 +170,83 @@ async def scrape_kamis_prices(kamis_id: int) -> dict | None:
             return None
 
 
+def _parse_price(text: str) -> float | None:
+    """Parse a KAMIS price string like '46.67/Kg' into a float, or None."""
+    match = re.match(r"([\d,]+\.?\d*)", text.replace(",", ""))
+    if match:
+        price = float(match.group(1))
+        if 1 < price < 500000:
+            return price
+    return None
+
+
+# --- Key Kenyan markets for multi-market comparison ---
+KEY_MARKETS = ["nairobi", "nyeri", "nakuru", "kisumu", "eldoret", "thika", "meru", "kitale"]
+
+async def scrape_kamis_per_market(kamis_id: int) -> list[dict] | None:
+    """
+    Scrapes KAMIS and returns per-market price breakdown.
+    Each entry: {market, county, wholesale, retail, date}
+    """
+    url = f"{KAMIS_BASE_URL}?product={kamis_id}"
+    headers = {"User-Agent": random.choice(USER_AGENTS)}
+
+    async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
+        try:
+            response = await client.get(url, headers=headers, timeout=15.0)
+            if response.status_code != 200:
+                return None
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            table = soup.find("table")
+            if not table:
+                return None
+
+            rows = table.find_all("tr")[1:]  # skip header
+
+            # Try to detect column layout from header row
+            header_row = table.find("tr")
+            header_texts = []
+            if header_row:
+                header_texts = [th.get_text(strip=True).lower() for th in header_row.find_all(["th", "td"])]
+
+            # Detect market column index
+            market_col = 1  # default
+            county_col = 0  # default
+            for i, ht in enumerate(header_texts):
+                if "market" in ht:
+                    market_col = i
+                elif "county" in ht:
+                    county_col = i
+
+            market_data = []
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) < 10:
+                    continue
+
+                market_name = cols[market_col].get_text(strip=True) if market_col < len(cols) else ""
+                county_name = cols[county_col].get_text(strip=True) if county_col < len(cols) else ""
+                wholesale = _parse_price(cols[5].get_text(strip=True))
+                retail = _parse_price(cols[6].get_text(strip=True))
+                date_text = cols[9].get_text(strip=True) if len(cols) > 9 else ""
+
+                if retail is not None or wholesale is not None:
+                    market_data.append({
+                        "market": market_name,
+                        "county": county_name,
+                        "wholesale_per_kg": wholesale,
+                        "retail_per_kg": retail,
+                        "date": date_text,
+                    })
+
+            return market_data if market_data else None
+
+        except Exception as e:
+            print(f"KAMIS per-market scraper error for product {kamis_id}: {e}")
+            return None
+
+
 @app.get("/api/prices/{crop}")
 async def get_market_prices(crop: str):
     crop = crop.lower()
@@ -243,6 +320,326 @@ async def get_market_prices(crop: str):
         "profit_margin_estimate": margin,
         "data_status": data_status,
     }
+
+
+# ==========================================
+# 2b. PER-MARKET PRICE COMPARISON
+# ==========================================
+@app.get("/api/prices/{crop}/markets")
+async def get_market_prices_by_market(crop: str):
+    """
+    Returns per-market wholesale & retail prices for a given crop,
+    focusing on key markets: Nairobi, Nyeri, Nakuru, Kisumu, Eldoret, etc.
+    """
+    crop = crop.lower()
+    if crop not in CROP_MAPPING:
+        raise HTTPException(status_code=400, detail="Crop not supported.")
+
+    crop_info = CROP_MAPPING[crop]
+    kamis_id = crop_info["kamis_id"]
+    kg_per_unit = crop_info["kg_per_unit"]
+
+    # Baseline fallback data per market (used when KAMIS is unreachable)
+    baselines_per_kg = {
+        "maize": {"nairobi": 55, "nyeri": 48, "nakuru": 50, "kisumu": 52, "eldoret": 45, "thika": 53, "meru": 47, "kitale": 44},
+        "tomatoes": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 92, "kitale": 88},
+        "cabbages": {"nairobi": 30, "nyeri": 25, "nakuru": 27, "kisumu": 28, "eldoret": 24, "thika": 29, "meru": 25, "kitale": 23},
+        "onions": {"nairobi": 90, "nyeri": 75, "nakuru": 80, "kisumu": 85, "eldoret": 72, "thika": 88, "meru": 74, "kitale": 70},
+        "french_beans": {"nairobi": 130, "nyeri": 115, "nakuru": 120, "kisumu": 125, "eldoret": 110, "thika": 128, "meru": 112, "kitale": 108},
+        "potatoes": {"nairobi": 80, "nyeri": 65, "nakuru": 70, "kisumu": 75, "eldoret": 60, "thika": 78, "meru": 63, "kitale": 58},
+        "wheat": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 93, "kitale": 88},
+    }
+
+    market_data = []
+    data_source = "live"
+
+    if kamis_id is not None:
+        raw_markets = await scrape_kamis_per_market(kamis_id)
+        if raw_markets:
+            # Group by market name (case-insensitive)
+            grouped: dict[str, list[dict]] = {}
+            for entry in raw_markets:
+                name = entry["market"].strip()
+                if name:
+                    grouped.setdefault(name.lower(), []).append(entry)
+
+            # Aggregate per market: median wholesale & retail
+            for market_key, entries in grouped.items():
+                wholesale_vals = sorted([e["wholesale_per_kg"] for e in entries if e["wholesale_per_kg"]])
+                retail_vals = sorted([e["retail_per_kg"] for e in entries if e["retail_per_kg"]])
+
+                def _median(vals):
+                    n = len(vals)
+                    if n == 0: return None
+                    return vals[n // 2]
+
+                ws = _median(wholesale_vals)
+                rt = _median(retail_vals)
+                latest = max((e["date"] for e in entries if e["date"]), default="")
+                county = entries[0]["county"]
+
+                market_data.append({
+                    "market": entries[0]["market"],
+                    "county": county,
+                    "wholesale_per_kg": round(ws, 2) if ws else None,
+                    "retail_per_kg": round(rt, 2) if rt else None,
+                    "wholesale_per_unit": round(ws * kg_per_unit, 2) if ws else None,
+                    "retail_per_unit": round(rt * kg_per_unit, 2) if rt else None,
+                    "date": latest,
+                    "is_key_market": market_key in KEY_MARKETS,
+                })
+
+    # If no live data, use baseline estimates
+    if not market_data:
+        data_source = "baseline"
+        crop_baselines = baselines_per_kg.get(crop, {})
+        for market_name, base_price in crop_baselines.items():
+            market_data.append({
+                "market": market_name.capitalize(),
+                "county": market_name.capitalize(),
+                "wholesale_per_kg": round(base_price, 2),
+                "retail_per_kg": round(base_price * 1.35, 2),
+                "wholesale_per_unit": round(base_price * kg_per_unit, 2),
+                "retail_per_unit": round(base_price * 1.35 * kg_per_unit, 2),
+                "date": "estimated",
+                "is_key_market": market_name.lower() in KEY_MARKETS,
+            })
+
+    # Sort: key markets first, then by retail price descending
+    market_data.sort(key=lambda m: (not m["is_key_market"], -(m["retail_per_kg"] or 0)))
+
+    return {
+        "crop": crop.capitalize(),
+        "unit": crop_info["unit"],
+        "kg_per_unit": kg_per_unit,
+        "markets": market_data,
+        "data_source": data_source,
+        "data_status": f"Live from KAMIS ({len(market_data)} markets)" if data_source == "live" else "Estimated baseline prices",
+    }
+
+
+# ==========================================
+# 2c. PRICE ANALYSIS & PREDICTION ENGINE
+# ==========================================
+@app.get("/api/analysis/{crop}")
+async def get_price_analysis(crop: str, user_lat: float = None, user_lon: float = None):
+    """
+    Provides price analysis, best-market recommendation, and simple
+    price predictions based on multi-market data from KAMIS.
+    """
+    crop = crop.lower()
+    if crop not in CROP_MAPPING:
+        raise HTTPException(status_code=400, detail="Crop not supported.")
+
+    crop_info = CROP_MAPPING[crop]
+    kamis_id = crop_info["kamis_id"]
+    kg_per_unit = crop_info["kg_per_unit"]
+
+    # Get per-market data
+    raw_markets = []
+    if kamis_id is not None:
+        raw_markets = await scrape_kamis_per_market(kamis_id) or []
+
+    # --- Build analysis from available data ---
+    # Fallback baseline if no live data
+    if not raw_markets:
+        baselines = {
+            "maize": {"Nairobi": 55, "Nyeri": 48, "Nakuru": 50},
+            "tomatoes": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
+            "cabbages": {"Nairobi": 30, "Nyeri": 25, "Nakuru": 27},
+            "onions": {"Nairobi": 90, "Nyeri": 75, "Nakuru": 80},
+            "french_beans": {"Nairobi": 130, "Nyeri": 115, "Nakuru": 120},
+            "potatoes": {"Nairobi": 80, "Nyeri": 65, "Nakuru": 70},
+            "wheat": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
+        }
+        crop_base = baselines.get(crop, {"Nairobi": 50, "Nyeri": 45, "Nakuru": 48})
+        for mkt, price in crop_base.items():
+            raw_markets.append({
+                "market": mkt,
+                "county": mkt,
+                "wholesale_per_kg": price,
+                "retail_per_kg": round(price * 1.35, 2),
+                "date": "baseline",
+            })
+
+    # Aggregate per market
+    grouped: dict[str, list[dict]] = {}
+    for entry in raw_markets:
+        name = entry["market"].strip()
+        if name:
+            grouped.setdefault(name.lower(), []).append(entry)
+
+    market_summaries = []
+    all_retail = []
+    all_wholesale = []
+
+    for mkt_key, entries in grouped.items():
+        ws_vals = [e["wholesale_per_kg"] for e in entries if e.get("wholesale_per_kg")]
+        rt_vals = [e["retail_per_kg"] for e in entries if e.get("retail_per_kg")]
+        if not rt_vals and not ws_vals:
+            continue
+
+        def _med(v):
+            v_sorted = sorted(v)
+            return v_sorted[len(v_sorted) // 2] if v_sorted else 0
+
+        ws_med = round(_med(ws_vals), 2) if ws_vals else 0
+        rt_med = round(_med(rt_vals), 2) if rt_vals else round(ws_med * 1.3, 2)
+
+        margin_pct = round(((rt_med - ws_med) / ws_med) * 100, 1) if ws_med else 0
+
+        market_summaries.append({
+            "market": entries[0]["market"],
+            "county": entries[0].get("county", ""),
+            "wholesale_per_kg": ws_med,
+            "retail_per_kg": rt_med,
+            "wholesale_per_unit": round(ws_med * kg_per_unit, 2),
+            "retail_per_unit": round(rt_med * kg_per_unit, 2),
+            "margin_pct": margin_pct,
+            "is_key_market": mkt_key in KEY_MARKETS,
+        })
+        if rt_med: all_retail.append(rt_med)
+        if ws_med: all_wholesale.append(ws_med)
+
+    # --- Statistical analysis ---
+    import statistics
+    avg_retail = round(statistics.mean(all_retail), 2) if all_retail else 0
+    avg_wholesale = round(statistics.mean(all_wholesale), 2) if all_wholesale else 0
+    std_retail = round(statistics.stdev(all_retail), 2) if len(all_retail) > 1 else 0
+    min_retail = round(min(all_retail), 2) if all_retail else 0
+    max_retail = round(max(all_retail), 2) if all_retail else 0
+    price_spread = round(max_retail - min_retail, 2)
+
+    # Coefficient of variation — measures how volatile prices are across markets
+    cv = round((std_retail / avg_retail) * 100, 1) if avg_retail else 0
+
+    # --- Best market to sell (highest retail price) ---
+    market_summaries.sort(key=lambda m: m["retail_per_kg"], reverse=True)
+    best_market = market_summaries[0] if market_summaries else None
+    worst_market = market_summaries[-1] if market_summaries else None
+
+    # --- Best market to buy (lowest wholesale) ---
+    market_summaries_by_ws = sorted(market_summaries, key=lambda m: m["wholesale_per_kg"])
+    cheapest_source = market_summaries_by_ws[0] if market_summaries_by_ws else None
+
+    # --- Price prediction (simple mean-reversion model) ---
+    # If current market price is above average → likely to decrease
+    # If below average → likely to increase
+    # Prediction confidence based on price spread / volatility
+    predictions = []
+    for ms in market_summaries[:8]:  # top 8 markets
+        deviation = ((ms["retail_per_kg"] - avg_retail) / avg_retail * 100) if avg_retail else 0
+        # Mean reversion: predict movement toward average
+        predicted_change_pct = round(-deviation * 0.3, 1)  # 30% reversion factor
+        predicted_retail = round(ms["retail_per_kg"] * (1 + predicted_change_pct / 100), 2)
+
+        if predicted_change_pct > 3:
+            trend = "rising"
+            emoji = "📈"
+        elif predicted_change_pct < -3:
+            trend = "falling"
+            emoji = "📉"
+        else:
+            trend = "stable"
+            emoji = "➡️"
+
+        predictions.append({
+            "market": ms["market"],
+            "current_retail_per_kg": ms["retail_per_kg"],
+            "predicted_retail_per_kg": predicted_retail,
+            "predicted_change_pct": predicted_change_pct,
+            "trend": trend,
+            "trend_emoji": emoji,
+            "confidence": "high" if cv < 15 else "medium" if cv < 30 else "low",
+        })
+
+    # --- Location-based recommendation ---
+    # Approximate coordinates for key Kenyan markets
+    MARKET_COORDS = {
+        "nairobi": (-1.286, 36.817),
+        "nyeri": (-0.420, 36.951),
+        "nakuru": (-0.303, 36.070),
+        "kisumu": (-0.092, 34.762),
+        "eldoret": (0.514, 35.270),
+        "thika": (-1.033, 37.070),
+        "meru": (0.047, 37.656),
+        "kitale": (1.016, 35.003),
+        "nanyuki": (-0.009, 37.074),
+        "rumuruti": (0.182, 36.871),
+        "nyahururu": (-0.042, 36.360),
+    }
+
+    nearest_market = None
+    distance_km = None
+    if user_lat is not None and user_lon is not None:
+        import math
+        min_dist = float("inf")
+        for mkt_key, (mkt_lat, mkt_lon) in MARKET_COORDS.items():
+            # Haversine distance
+            dlat = math.radians(mkt_lat - user_lat)
+            dlon = math.radians(mkt_lon - user_lon)
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(user_lat)) * math.cos(math.radians(mkt_lat)) * math.sin(dlon/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            dist = 6371 * c  # Earth radius in km
+            if dist < min_dist:
+                min_dist = dist
+                nearest_market = mkt_key
+                distance_km = round(dist, 1)
+
+    # --- Build advisory text ---
+    advice_lines = []
+    if best_market and worst_market:
+        advice_lines.append(
+            f"🏆 Best market to sell {crop.capitalize()}: {best_market['market']} "
+            f"(KES {best_market['retail_per_kg']}/kg retail)"
+        )
+        advice_lines.append(
+            f"🛒 Cheapest source: {cheapest_source['market'] if cheapest_source else 'N/A'} "
+            f"(KES {cheapest_source['wholesale_per_kg']}/kg wholesale)" if cheapest_source else ""
+        )
+
+    if cv < 15:
+        advice_lines.append("📊 Prices are stable across markets — low arbitrage opportunity.")
+    elif cv < 30:
+        advice_lines.append(
+            f"📊 Moderate price variation (CV {cv}%) — consider selling in higher-paying markets."
+        )
+    else:
+        advice_lines.append(
+            f"📊 High price disparity (CV {cv}%) — significant arbitrage opportunity! "
+            f"Spread: KES {price_spread}/kg between cheapest and most expensive market."
+        )
+
+    if nearest_market:
+        advice_lines.append(
+            f"📍 Nearest major market: {nearest_market.capitalize()} ({distance_km} km away)"
+        )
+
+    return {
+        "crop": crop.capitalize(),
+        "unit": crop_info["unit"],
+        "kg_per_unit": kg_per_unit,
+        "market_analysis": market_summaries[:15],
+        "statistics": {
+            "avg_retail_per_kg": avg_retail,
+            "avg_wholesale_per_kg": avg_wholesale,
+            "price_spread_per_kg": price_spread,
+            "min_retail_per_kg": min_retail,
+            "max_retail_per_kg": max_retail,
+            "volatility_cv_pct": cv,
+        },
+        "predictions": predictions,
+        "recommendation": {
+            "best_sell_market": best_market["market"] if best_market else None,
+            "best_sell_price": best_market["retail_per_kg"] if best_market else None,
+            "cheapest_buy_market": cheapest_source["market"] if cheapest_source else None,
+            "cheapest_buy_price": cheapest_source["wholesale_per_kg"] if cheapest_source else None,
+        },
+        "nearest_market": nearest_market.capitalize() if nearest_market else None,
+        "distance_km": distance_km,
+        "advisory": "\n".join(advice_lines),
+    }
+
 
 # ==========================================
 # 3. AI FARMER ADVISORY ENGINE (Bilingual)

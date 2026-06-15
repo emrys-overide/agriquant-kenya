@@ -4,6 +4,8 @@ Ports all API endpoints from the FastAPI backend (main.py).
 Endpoints:
   GET  /api/weather/<location>
   GET  /api/prices/<crop>
+  GET  /api/prices/<crop>/markets
+  GET  /api/analysis/<crop>
   POST /api/advice
   POST /api/chat
 """
@@ -130,6 +132,96 @@ async def scrape_kamis_prices(kamis_id):
     }
 
 
+KEY_MARKETS = ["nairobi", "nyeri", "nakuru", "kisumu", "eldoret", "thika", "meru", "kitale"]
+
+MARKET_COORDS = {
+    "nairobi": (-1.286, 36.817),
+    "nyeri": (-0.420, 36.951),
+    "nakuru": (-0.303, 36.070),
+    "kisumu": (-0.092, 34.762),
+    "eldoret": (0.514, 35.270),
+    "thika": (-1.033, 37.070),
+    "meru": (0.047, 37.656),
+    "kitale": (1.016, 35.003),
+    "nanyuki": (-0.009, 37.074),
+    "rumuruti": (0.182, 36.871),
+    "nyahururu": (-0.042, 36.360),
+}
+
+
+def _parse_price(text):
+    """Parse a KAMIS price string like '46.67/Kg' into a float, or None."""
+    cleaned = text.replace(",", "")
+    m = re.match(r"([\d]+\.?\d*)", cleaned)
+    if m:
+        price = float(m.group(1))
+        if 1 < price < 500000:
+            return price
+    return None
+
+
+async def scrape_kamis_per_market(kamis_id):
+    """
+    Scrapes KAMIS and returns per-market price breakdown.
+    Each entry: {market, county, wholesale, retail, date}
+    """
+    url = KAMIS_BASE_URL + "?product=" + str(kamis_id)
+    ua = random.choice(USER_AGENTS)
+
+    try:
+        resp = await fetch(url, Object.fromEntries([
+            ["headers", Object.fromEntries([["User-Agent", ua]])],
+            ["redirect", "follow"],
+        ]))
+        if resp.status != 200:
+            return None
+        html = await resp.text()
+    except Exception:
+        return None
+
+    tr_blocks = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.DOTALL)
+    if not tr_blocks:
+        return None
+
+    def strip(s):
+        return re.sub(r"<[^>]+>", "", s).strip()
+
+    # Try to detect market column from header
+    market_col = 1
+    county_col = 0
+    if tr_blocks:
+        header_cols = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", tr_blocks[0], re.DOTALL)
+        for i, hc in enumerate(header_cols):
+            ht = strip(hc).lower()
+            if "market" in ht:
+                market_col = i
+            elif "county" in ht:
+                county_col = i
+
+    market_data = []
+    for tr in tr_blocks[1:]:
+        cols = re.findall(r"<td[^>]*>(.*?)</td>", tr, re.DOTALL)
+        if len(cols) < 10:
+            continue
+
+        market_name = strip(cols[market_col]) if market_col < len(cols) else ""
+        county_name = strip(cols[county_col]) if county_col < len(cols) else ""
+        wholesale = _parse_price(strip(cols[5]))
+        retail = _parse_price(strip(cols[6]))
+        date_text = strip(cols[9]) if len(cols) > 9 else ""
+
+        if retail is not None or wholesale is not None:
+            market_data.append({
+                "market": market_name,
+                "county": county_name,
+                "wholesale_per_kg": wholesale,
+                "retail_per_kg": retail,
+                "date": date_text,
+            })
+
+    return market_data if market_data else None
+
+
 # ── Request router ─────────────────────────────────────────────────
 
 async def on_fetch(request, env):
@@ -201,6 +293,280 @@ async def on_fetch(request, env):
                 for d in forecast
             ],
             "agri_risk_alerts": risk_alerts,
+        })
+
+    # ── GET /api/prices/<crop>/markets ──────────────────────────────
+    m = re.match(r"^/api/prices/(.+)/markets$", path)
+    if m and request.method == "GET":
+        crop = m.group(1).lower()
+        if crop not in CROP_MAPPING:
+            return error_response("Crop not supported.", 400)
+
+        crop_info = CROP_MAPPING[crop]
+        kamis_id = crop_info["kamis_id"]
+        kg_per_unit = crop_info["kg_per_unit"]
+
+        baselines_per_kg = {
+            "maize": {"nairobi": 55, "nyeri": 48, "nakuru": 50, "kisumu": 52, "eldoret": 45, "thika": 53, "meru": 47, "kitale": 44},
+            "tomatoes": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 92, "kitale": 88},
+            "cabbages": {"nairobi": 30, "nyeri": 25, "nakuru": 27, "kisumu": 28, "eldoret": 24, "thika": 29, "meru": 25, "kitale": 23},
+            "onions": {"nairobi": 90, "nyeri": 75, "nakuru": 80, "kisumu": 85, "eldoret": 72, "thika": 88, "meru": 74, "kitale": 70},
+            "french_beans": {"nairobi": 130, "nyeri": 115, "nakuru": 120, "kisumu": 125, "eldoret": 110, "thika": 128, "meru": 112, "kitale": 108},
+            "potatoes": {"nairobi": 80, "nyeri": 65, "nakuru": 70, "kisumu": 75, "eldoret": 60, "thika": 78, "meru": 63, "kitale": 58},
+            "wheat": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 93, "kitale": 88},
+        }
+
+        market_data = []
+        data_source = "live"
+
+        if kamis_id is not None:
+            raw_markets = await scrape_kamis_per_market(kamis_id)
+            if raw_markets:
+                grouped = {}
+                for entry in raw_markets:
+                    name = entry["market"].strip()
+                    if name:
+                        grouped.setdefault(name.lower(), []).append(entry)
+
+                for mkt_key, entries in grouped.items():
+                    ws_vals = sorted([e["wholesale_per_kg"] for e in entries if e["wholesale_per_kg"]])
+                    rt_vals = sorted([e["retail_per_kg"] for e in entries if e["retail_per_kg"]])
+
+                    def _med(vals):
+                        n = len(vals)
+                        return vals[n // 2] if n else None
+
+                    ws = _med(ws_vals)
+                    rt = _med(rt_vals)
+                    latest = ""
+                    for e in entries:
+                        if e["date"] and e["date"] > latest:
+                            latest = e["date"]
+                    county = entries[0]["county"]
+
+                    market_data.append({
+                        "market": entries[0]["market"],
+                        "county": county,
+                        "wholesale_per_kg": round(ws, 2) if ws else None,
+                        "retail_per_kg": round(rt, 2) if rt else None,
+                        "wholesale_per_unit": round(ws * kg_per_unit, 2) if ws else None,
+                        "retail_per_unit": round(rt * kg_per_unit, 2) if rt else None,
+                        "date": latest,
+                        "is_key_market": mkt_key in KEY_MARKETS,
+                    })
+
+        if not market_data:
+            data_source = "baseline"
+            crop_baselines = baselines_per_kg.get(crop, {})
+            for mkt_name, base_price in crop_baselines.items():
+                market_data.append({
+                    "market": mkt_name.capitalize(),
+                    "county": mkt_name.capitalize(),
+                    "wholesale_per_kg": round(base_price, 2),
+                    "retail_per_kg": round(base_price * 1.35, 2),
+                    "wholesale_per_unit": round(base_price * kg_per_unit, 2),
+                    "retail_per_unit": round(base_price * 1.35 * kg_per_unit, 2),
+                    "date": "estimated",
+                    "is_key_market": mkt_name.lower() in KEY_MARKETS,
+                })
+
+        market_data.sort(key=lambda x: (not x["is_key_market"], -(x["retail_per_kg"] or 0)))
+
+        return json_response({
+            "crop": crop.capitalize(),
+            "unit": crop_info["unit"],
+            "kg_per_unit": kg_per_unit,
+            "markets": market_data,
+            "data_source": data_source,
+            "data_status": "Live from KAMIS (" + str(len(market_data)) + " markets)" if data_source == "live" else "Estimated baseline prices",
+        })
+
+    # ── GET /api/analysis/<crop> ────────────────────────────────────
+    m = re.match(r"^/api/analysis/(.+)$", path)
+    if m and request.method == "GET":
+        import math
+        crop = m.group(1).lower()
+        if crop not in CROP_MAPPING:
+            return error_response("Crop not supported.", 400)
+
+        crop_info = CROP_MAPPING[crop]
+        kamis_id = crop_info["kamis_id"]
+        kg_per_unit = crop_info["kg_per_unit"]
+
+        user_lat = float(query.get("user_lat", [None])[0]) if query.get("user_lat") else None
+        user_lon = float(query.get("user_lon", [None])[0]) if query.get("user_lon") else None
+
+        raw_markets = []
+        if kamis_id is not None:
+            raw_markets = await scrape_kamis_per_market(kamis_id) or []
+
+        if not raw_markets:
+            baselines = {
+                "maize": {"Nairobi": 55, "Nyeri": 48, "Nakuru": 50},
+                "tomatoes": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
+                "cabbages": {"Nairobi": 30, "Nyeri": 25, "Nakuru": 27},
+                "onions": {"Nairobi": 90, "Nyeri": 75, "Nakuru": 80},
+                "french_beans": {"Nairobi": 130, "Nyeri": 115, "Nakuru": 120},
+                "potatoes": {"Nairobi": 80, "Nyeri": 65, "Nakuru": 70},
+                "wheat": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
+            }
+            crop_base = baselines.get(crop, {"Nairobi": 50, "Nyeri": 45, "Nakuru": 48})
+            for mkt, price in crop_base.items():
+                raw_markets.append({
+                    "market": mkt, "county": mkt,
+                    "wholesale_per_kg": price,
+                    "retail_per_kg": round(price * 1.35, 2),
+                    "date": "baseline",
+                })
+
+        grouped = {}
+        for entry in raw_markets:
+            name = entry["market"].strip()
+            if name:
+                grouped.setdefault(name.lower(), []).append(entry)
+
+        market_summaries = []
+        all_retail = []
+        all_wholesale = []
+
+        for mkt_key, entries in grouped.items():
+            ws_vals = [e["wholesale_per_kg"] for e in entries if e.get("wholesale_per_kg")]
+            rt_vals = [e["retail_per_kg"] for e in entries if e.get("retail_per_kg")]
+            if not rt_vals and not ws_vals:
+                continue
+
+            def _med2(v):
+                vs = sorted(v)
+                return vs[len(vs) // 2] if vs else 0
+
+            ws_med = round(_med2(ws_vals), 2) if ws_vals else 0
+            rt_med = round(_med2(rt_vals), 2) if rt_vals else round(ws_med * 1.3, 2)
+            margin_pct = round(((rt_med - ws_med) / ws_med) * 100, 1) if ws_med else 0
+
+            market_summaries.append({
+                "market": entries[0]["market"],
+                "county": entries[0].get("county", ""),
+                "wholesale_per_kg": ws_med,
+                "retail_per_kg": rt_med,
+                "wholesale_per_unit": round(ws_med * kg_per_unit, 2),
+                "retail_per_unit": round(rt_med * kg_per_unit, 2),
+                "margin_pct": margin_pct,
+                "is_key_market": mkt_key in KEY_MARKETS,
+            })
+            if rt_med: all_retail.append(rt_med)
+            if ws_med: all_wholesale.append(ws_med)
+
+        n_rt = len(all_retail)
+        avg_retail = round(sum(all_retail) / n_rt, 2) if n_rt else 0
+        avg_wholesale = round(sum(all_wholesale) / len(all_wholesale), 2) if all_wholesale else 0
+
+        if n_rt > 1:
+            variance = sum((x - avg_retail) ** 2 for x in all_retail) / (n_rt - 1)
+            std_retail = round(variance ** 0.5, 2)
+        else:
+            std_retail = 0
+
+        min_retail = round(min(all_retail), 2) if all_retail else 0
+        max_retail = round(max(all_retail), 2) if all_retail else 0
+        price_spread = round(max_retail - min_retail, 2)
+        cv = round((std_retail / avg_retail) * 100, 1) if avg_retail else 0
+
+        market_summaries.sort(key=lambda x: x["retail_per_kg"], reverse=True)
+        best_market = market_summaries[0] if market_summaries else None
+        worst_market = market_summaries[-1] if market_summaries else None
+        by_ws = sorted(market_summaries, key=lambda x: x["wholesale_per_kg"])
+        cheapest_source = by_ws[0] if by_ws else None
+
+        predictions = []
+        for ms in market_summaries[:8]:
+            deviation = ((ms["retail_per_kg"] - avg_retail) / avg_retail * 100) if avg_retail else 0
+            predicted_change_pct = round(-deviation * 0.3, 1)
+            predicted_retail = round(ms["retail_per_kg"] * (1 + predicted_change_pct / 100), 2)
+
+            if predicted_change_pct > 3:
+                trend = "rising"
+                emoji = "📈"
+            elif predicted_change_pct < -3:
+                trend = "falling"
+                emoji = "📉"
+            else:
+                trend = "stable"
+                emoji = "➡️"
+
+            predictions.append({
+                "market": ms["market"],
+                "current_retail_per_kg": ms["retail_per_kg"],
+                "predicted_retail_per_kg": predicted_retail,
+                "predicted_change_pct": predicted_change_pct,
+                "trend": trend,
+                "trend_emoji": emoji,
+                "confidence": "high" if cv < 15 else "medium" if cv < 30 else "low",
+            })
+
+        nearest_market = None
+        distance_km = None
+        if user_lat is not None and user_lon is not None:
+            min_dist = float("inf")
+            for mkt_key, (mkt_lat, mkt_lon) in MARKET_COORDS.items():
+                dlat = math.radians(mkt_lat - user_lat)
+                dlon = math.radians(mkt_lon - user_lon)
+                a = math.sin(dlat/2)**2 + math.cos(math.radians(user_lat)) * math.cos(math.radians(mkt_lat)) * math.sin(dlon/2)**2
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+                dist = 6371 * c
+                if dist < min_dist:
+                    min_dist = dist
+                    nearest_market = mkt_key
+                    distance_km = round(dist, 1)
+
+        advice_lines = []
+        if best_market and cheapest_source:
+            advice_lines.append(
+                "🏆 Best market to sell " + crop.capitalize() + ": " + best_market["market"] +
+                " (KES " + str(best_market["retail_per_kg"]) + "/kg retail)"
+            )
+            advice_lines.append(
+                "🛒 Cheapest source: " + cheapest_source["market"] +
+                " (KES " + str(cheapest_source["wholesale_per_kg"]) + "/kg wholesale)"
+            )
+
+        if cv < 15:
+            advice_lines.append("📊 Prices are stable across markets — low arbitrage opportunity.")
+        elif cv < 30:
+            advice_lines.append("📊 Moderate price variation (CV " + str(cv) + "%) — consider selling in higher-paying markets.")
+        else:
+            advice_lines.append(
+                "📊 High price disparity (CV " + str(cv) + "%) — significant arbitrage opportunity! " +
+                "Spread: KES " + str(price_spread) + "/kg between cheapest and most expensive market."
+            )
+
+        if nearest_market:
+            advice_lines.append(
+                "📍 Nearest major market: " + nearest_market.capitalize() + " (" + str(distance_km) + " km away)"
+            )
+
+        return json_response({
+            "crop": crop.capitalize(),
+            "unit": crop_info["unit"],
+            "kg_per_unit": kg_per_unit,
+            "market_analysis": market_summaries[:15],
+            "statistics": {
+                "avg_retail_per_kg": avg_retail,
+                "avg_wholesale_per_kg": avg_wholesale,
+                "price_spread_per_kg": price_spread,
+                "min_retail_per_kg": min_retail,
+                "max_retail_per_kg": max_retail,
+                "volatility_cv_pct": cv,
+            },
+            "predictions": predictions,
+            "recommendation": {
+                "best_sell_market": best_market["market"] if best_market else None,
+                "best_sell_price": best_market["retail_per_kg"] if best_market else None,
+                "cheapest_buy_market": cheapest_source["market"] if cheapest_source else None,
+                "cheapest_buy_price": cheapest_source["wholesale_per_kg"] if cheapest_source else None,
+            },
+            "nearest_market": nearest_market.capitalize() if nearest_market else None,
+            "distance_km": distance_km,
+            "advisory": "\n".join(advice_lines),
         })
 
     # ── GET /api/prices/<crop> ─────────────────────────────────────
@@ -531,6 +897,6 @@ async def on_fetch(request, env):
 
     # ── Fallback ───────────────────────────────────────────────────
     return error_response(
-        "Not found. Available: /api/weather/<loc>, /api/prices/<crop>, POST /api/advice, POST /api/chat",
+        "Not found. Available: /api/weather/<loc>, /api/prices/<crop>, /api/prices/<crop>/markets, /api/analysis/<crop>, POST /api/advice, POST /api/chat",
         404,
     )

@@ -18,6 +18,13 @@ import {
   Droplets,
   Thermometer,
   Sprout,
+  MapPin,
+  Navigation,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  Crosshair,
+  BarChart3,
 } from "lucide-react";
 import {
   Area,
@@ -70,6 +77,71 @@ type PriceData = {
   retail_price_ksh: number;
   profit_margin_estimate: number;
   data_status: string;
+};
+
+type MarketEntry = {
+  market: string;
+  county: string;
+  wholesale_per_kg: number | null;
+  retail_per_kg: number | null;
+  wholesale_per_unit: number | null;
+  retail_per_unit: number | null;
+  date: string;
+  is_key_market: boolean;
+};
+
+type MarketComparisonData = {
+  crop: string;
+  unit: string;
+  kg_per_unit: number;
+  markets: MarketEntry[];
+  data_source: string;
+  data_status: string;
+};
+
+type MarketAnalysisEntry = {
+  market: string;
+  county: string;
+  wholesale_per_kg: number;
+  retail_per_kg: number;
+  wholesale_per_unit: number;
+  retail_per_unit: number;
+  margin_pct: number;
+  is_key_market: boolean;
+};
+
+type Prediction = {
+  market: string;
+  current_retail_per_kg: number;
+  predicted_retail_per_kg: number;
+  predicted_change_pct: number;
+  trend: "rising" | "falling" | "stable";
+  trend_emoji: string;
+  confidence: "high" | "medium" | "low";
+};
+
+type AnalysisData = {
+  crop: string;
+  unit: string;
+  market_analysis: MarketAnalysisEntry[];
+  statistics: {
+    avg_retail_per_kg: number;
+    avg_wholesale_per_kg: number;
+    price_spread_per_kg: number;
+    min_retail_per_kg: number;
+    max_retail_per_kg: number;
+    volatility_cv_pct: number;
+  };
+  predictions: Prediction[];
+  recommendation: {
+    best_sell_market: string | null;
+    best_sell_price: number | null;
+    cheapest_buy_market: string | null;
+    cheapest_buy_price: number | null;
+  };
+  nearest_market: string | null;
+  distance_km: number | null;
+  advisory: string;
 };
 
 type AdviceData = {
@@ -129,6 +201,31 @@ const translations: Record<string, { en: string; sw: string }> = {
     sw: "Samahani, sikuweza kuchakata hilo. Tafadhali jaribu tena.",
   },
   tempRain: { en: "Temp & Rain", sw: "Joto na Mvua" },
+  marketComparison: { en: "Market Price Comparison", sw: "Ulinganisho wa Bei Masokoni" },
+  perKg: { en: "per kg", sw: "kwa kg" },
+  perUnit: { en: "per unit", sw: "kwa kipimo" },
+  analysisPrediction: { en: "Price Analysis & Prediction", sw: "Uchambuzi na Utabiri wa Bei" },
+  bestSellMarket: { en: "Best Market to Sell", sw: "Soko Bora la Kuuza" },
+  cheapestBuy: { en: "Cheapest to Buy", sw: "Rahisi Zaidi Kununua" },
+  priceSpread: { en: "Price Spread", sw: "Tofauti ya Bei" },
+  volatility: { en: "Volatility (CV)", sw: "Kutokuwa Thabiti (CV)" },
+  avgRetail: { en: "Avg Retail", sw: "Wastani Rejareja" },
+  avgWholesale: { en: "Avg Wholesale", sw: "Wastani Jumla" },
+  trend: { en: "Trend", sw: "Mwenendo" },
+  predicted: { en: "Predicted", sw: "Utabiri" },
+  current: { en: "Current", sw: "Sasa" },
+  confidence: { en: "Confidence", sw: "Uhakika" },
+  rising: { en: "Rising", sw: "Inapanda" },
+  falling: { en: "Falling", sw: "Inashuka" },
+  stable: { en: "Stable", sw: "Thabiti" },
+  nearestMarket: { en: "Nearest Market", sw: "Soko la Karibu" },
+  kmAway: { en: "km away", sw: "km mbali" },
+  useMyLocation: { en: "Use My Location", sw: "Tumia Eneo Langu" },
+  detecting: { en: "Detecting...", sw: "Inatafuta..." },
+  market: { en: "Market", sw: "Soko" },
+  keyMarkets: { en: "Key Markets", sw: "Masoko Makuu" },
+  allMarkets: { en: "All Markets", sw: "Masoko Yote" },
+  recommendation: { en: "Recommendation", sw: "Mapendekezo" },
 };
 
 function t(key: string, lang: "en" | "sw"): string {
@@ -191,6 +288,13 @@ export default function Dashboard() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInitialized = useRef(false);
 
+  /* geolocation & market comparison & analysis state */
+  const [geoLoading, setGeoLoading] = useState(false);
+  const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
+  const [marketData, setMarketData] = useState<MarketComparisonData | null>(null);
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
+  const [showAllMarkets, setShowAllMarkets] = useState(false);
+
   /* --- derived data --- */
   const priceChartData = [
     { name: t("farmGate", lang), price: prices?.farm_gate_price_ksh ?? 0 },
@@ -213,6 +317,43 @@ export default function Dashboard() {
     setFetchTrigger((prev) => prev + 1);
   };
 
+  /* --- geolocation handler --- */
+  const handleGeoLocate = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setUserCoords({ lat: latitude, lon: longitude });
+        // Reverse-geocode via OpenStreetMap Nominatim
+        try {
+          const geoRes = await axios.get(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=en`,
+            { timeout: 8000 }
+          );
+          const addr = geoRes.data?.address;
+          const town =
+            addr?.town || addr?.city || addr?.village || addr?.county || addr?.state || "My Location";
+          setLocation(town);
+          setFetchTrigger((prev) => prev + 1);
+        } catch {
+          // If geocoding fails, use coordinates-based label
+          setLocation(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
+          setFetchTrigger((prev) => prev + 1);
+        }
+        setGeoLoading(false);
+      },
+      (err) => {
+        console.warn("Geolocation error:", err.message);
+        setGeoLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   /* --- data fetching --- */
   useEffect(() => {
     let ignore = false;
@@ -220,9 +361,15 @@ export default function Dashboard() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [weatherRes, pricesRes] = await Promise.all([
+        const analysisUrl = userCoords
+          ? `${API_URL}/analysis/${crop}?user_lat=${userCoords.lat}&user_lon=${userCoords.lon}`
+          : `${API_URL}/analysis/${crop}`;
+
+        const [weatherRes, pricesRes, marketsRes, analysisRes] = await Promise.all([
           axios.get<WeatherData>(`${API_URL}/weather/${location}`),
           axios.get<PriceData>(`${API_URL}/prices/${crop}`),
+          axios.get<MarketComparisonData>(`${API_URL}/prices/${crop}/markets`).catch(() => null),
+          axios.get<AnalysisData>(analysisUrl).catch(() => null),
         ]);
 
         const adviceRes = await axios.post<AdviceData>(`${API_URL}/advice`, {
@@ -235,6 +382,8 @@ export default function Dashboard() {
 
         setWeather(weatherRes.data);
         setPrices(pricesRes.data);
+        setMarketData(marketsRes?.data ?? null);
+        setAnalysisData(analysisRes?.data ?? null);
         setAdvice(adviceRes.data.advisory_report);
         setError(null);
       } catch (caughtError) {
@@ -358,13 +507,28 @@ export default function Dashboard() {
 
               {/* Form */}
               <form onSubmit={handleRefresh} className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <input
-                  type="text"
-                  value={location}
-                  onChange={handleLocationChange}
-                  placeholder={t("locationPlaceholder", lang)}
-                  className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder-gray-500 outline-none backdrop-blur-sm transition focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                />
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={location}
+                    onChange={handleLocationChange}
+                    placeholder={t("locationPlaceholder", lang)}
+                    className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder-gray-500 outline-none backdrop-blur-sm transition focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGeoLocate}
+                    disabled={geoLoading}
+                    title={t("useMyLocation", lang)}
+                    className="flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-gray-400 transition hover:bg-white/10 hover:text-emerald-400 disabled:opacity-50"
+                  >
+                    {geoLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Crosshair className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
                 <select
                   value={crop}
                   onChange={handleCropChange}
@@ -651,6 +815,253 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+
+              {/* ======================================================== */}
+              {/*  MARKET COMPARISON (full width)                           */}
+              {/* ======================================================== */}
+              {marketData && marketData.markets.length > 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.07]">
+                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="flex items-center gap-2 text-base font-semibold text-gray-200">
+                      <MapPin className="h-5 w-5 text-orange-400" />
+                      {t("marketComparison", lang)}: {marketData.crop} ({t("perKg", lang)})
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      {/* Nearest market badge */}
+                      {analysisData?.nearest_market && (
+                        <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400">
+                          <Navigation className="h-3 w-3" />
+                          {t("nearestMarket", lang)}: {analysisData.nearest_market}
+                          {analysisData.distance_km && ` (${analysisData.distance_km} ${t("kmAway", lang)})`}
+                        </span>
+                      )}
+                      <button
+                        onClick={() => setShowAllMarkets(!showAllMarkets)}
+                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-400 transition hover:bg-white/10"
+                      >
+                        {showAllMarkets ? t("keyMarkets", lang) : t("allMarkets", lang)}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Market comparison bar chart */}
+                  <div className="h-72 mb-4">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={(showAllMarkets
+                          ? marketData.markets
+                          : marketData.markets.filter((m) => m.is_key_market)
+                        )
+                          .filter((m) => m.retail_per_kg !== null)
+                          .slice(0, 12)
+                          .map((m) => ({
+                            name: m.market,
+                            Wholesale: m.wholesale_per_kg ?? 0,
+                            Retail: m.retail_per_kg ?? 0,
+                          }))}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} angle={-20} textAnchor="end" height={50} />
+                        <YAxis stroke="#9CA3AF" fontSize={11} />
+                        <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                        <Bar dataKey="Wholesale" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Retail" fill="#10B981" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Legend for market comparison */}
+                  <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-4 rounded-sm bg-blue-500" /> {t("wholesale", lang)} (KES/kg)
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-4 rounded-sm bg-emerald-500" /> {t("retail", lang)} (KES/kg)
+                    </span>
+                  </div>
+
+                  {/* Market table for key markets */}
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-gray-500">
+                          <th className="pb-2 pr-4">{t("market", lang)}</th>
+                          <th className="pb-2 pr-4 text-right">{t("wholesale", lang)}/kg</th>
+                          <th className="pb-2 pr-4 text-right">{t("retail", lang)}/kg</th>
+                          <th className="pb-2 text-right">{t("trend", lang)}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {(showAllMarkets
+                          ? marketData.markets
+                          : marketData.markets.filter((m) => m.is_key_market)
+                        )
+                          .filter((m) => m.retail_per_kg !== null)
+                          .slice(0, 10)
+                          .map((m) => {
+                            const prediction = analysisData?.predictions?.find(
+                              (p) => p.market.toLowerCase() === m.market.toLowerCase()
+                            );
+                            return (
+                              <tr key={m.market} className="text-gray-300 hover:bg-white/[0.02]">
+                                <td className="py-2 pr-4 font-medium">
+                                  <div className="flex items-center gap-2">
+                                    {m.is_key_market && (
+                                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                                    )}
+                                    {m.market}
+                                  </div>
+                                </td>
+                                <td className="py-2 pr-4 text-right text-blue-400">
+                                  KES {m.wholesale_per_kg?.toLocaleString() ?? "—"}
+                                </td>
+                                <td className="py-2 pr-4 text-right text-emerald-400">
+                                  KES {m.retail_per_kg?.toLocaleString() ?? "—"}
+                                </td>
+                                <td className="py-2 text-right">
+                                  {prediction ? (
+                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                      prediction.trend === "rising"
+                                        ? "bg-emerald-500/10 text-emerald-400"
+                                        : prediction.trend === "falling"
+                                        ? "bg-red-500/10 text-red-400"
+                                        : "bg-gray-500/10 text-gray-400"
+                                    }`}>
+                                      {prediction.trend === "rising" && <ArrowUpRight className="h-3 w-3" />}
+                                      {prediction.trend === "falling" && <ArrowDownRight className="h-3 w-3" />}
+                                      {prediction.trend === "stable" && <Minus className="h-3 w-3" />}
+                                      {prediction.predicted_change_pct > 0 ? "+" : ""}
+                                      {prediction.predicted_change_pct}%
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-600">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ======================================================== */}
+              {/*  PRICE ANALYSIS & PREDICTION (full width)                */}
+              {/* ======================================================== */}
+              {analysisData && (
+                <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-6 shadow-2xl shadow-purple-500/5 backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-purple-500/30">
+                  <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-purple-300">
+                    <BarChart3 className="h-5 w-5 text-purple-400" />
+                    {t("analysisPrediction", lang)}: {analysisData.crop}
+                  </h2>
+
+                  {/* Stats row */}
+                  <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                      <p className="mb-1 text-xs text-gray-500">{t("avgRetail", lang)}</p>
+                      <p className="text-lg font-bold text-emerald-400">
+                        KES {analysisData.statistics.avg_retail_per_kg.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                      <p className="mb-1 text-xs text-gray-500">{t("avgWholesale", lang)}</p>
+                      <p className="text-lg font-bold text-blue-400">
+                        KES {analysisData.statistics.avg_wholesale_per_kg.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                      <p className="mb-1 text-xs text-gray-500">{t("priceSpread", lang)}</p>
+                      <p className="text-lg font-bold text-amber-400">
+                        KES {analysisData.statistics.price_spread_per_kg.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                      <p className="mb-1 text-xs text-gray-500">{t("volatility", lang)}</p>
+                      <p className={`text-lg font-bold ${
+                        analysisData.statistics.volatility_cv_pct > 30
+                          ? "text-red-400"
+                          : analysisData.statistics.volatility_cv_pct > 15
+                          ? "text-amber-400"
+                          : "text-emerald-400"
+                      }`}>
+                        {analysisData.statistics.volatility_cv_pct}%
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Recommendation cards */}
+                  <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {analysisData.recommendation.best_sell_market && (
+                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-emerald-500">
+                          <TrendingUp className="h-3.5 w-3.5" />
+                          {t("bestSellMarket", lang)}
+                        </div>
+                        <p className="text-lg font-bold text-white">
+                          {analysisData.recommendation.best_sell_market}
+                        </p>
+                        <p className="text-sm text-emerald-400">
+                          KES {analysisData.recommendation.best_sell_price?.toLocaleString()}/kg
+                        </p>
+                      </div>
+                    )}
+                    {analysisData.recommendation.cheapest_buy_market && (
+                      <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-blue-500">
+                          <ArrowDownRight className="h-3.5 w-3.5" />
+                          {t("cheapestBuy", lang)}
+                        </div>
+                        <p className="text-lg font-bold text-white">
+                          {analysisData.recommendation.cheapest_buy_market}
+                        </p>
+                        <p className="text-sm text-blue-400">
+                          KES {analysisData.recommendation.cheapest_buy_price?.toLocaleString()}/kg
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Predictions chart */}
+                  {analysisData.predictions.length > 0 && (
+                    <div className="h-56 mb-4">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={analysisData.predictions.map((p) => ({
+                            name: p.market,
+                            [t("current", lang)]: p.current_retail_per_kg,
+                            [t("predicted", lang)]: p.predicted_retail_per_kg,
+                          }))}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                          <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} angle={-20} textAnchor="end" height={50} />
+                          <YAxis stroke="#9CA3AF" fontSize={11} />
+                          <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                          <Bar dataKey={t("current", lang)} fill="#8B5CF6" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey={t("predicted", lang)} fill="#C084FC" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* Prediction legend */}
+                  <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-4 rounded-sm bg-violet-500" /> {t("current", lang)} (KES/kg)
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="h-2 w-4 rounded-sm bg-purple-300" /> {t("predicted", lang)} (KES/kg)
+                    </span>
+                  </div>
+
+                  {/* Analysis advisory text */}
+                  {analysisData.advisory && (
+                    <div className="whitespace-pre-line rounded-xl border border-white/5 bg-white/[0.03] p-4 text-sm leading-relaxed text-gray-300">
+                      {analysisData.advisory}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* ======================================================== */}
               {/*  ADVISORY (full width)                                    */}
