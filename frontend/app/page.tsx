@@ -466,9 +466,13 @@ export default function Dashboard() {
   /* ================================================================ */
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-gray-950 font-sans text-gray-100">
-      {/* Animated gradient background */}
-      <div className="pointer-events-none fixed inset-0 z-0 animate-gradient-shift bg-[length:400%_400%] bg-gradient-to-br from-gray-950 via-emerald-950/30 to-gray-950" />
+    <div className="relative min-h-screen overflow-hidden overflow-x-hidden bg-gray-950 font-sans text-gray-100">
+      {/* Layered background */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-emerald-950/20 to-gray-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/10 via-transparent to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-96 bg-gradient-to-t from-emerald-950/10 to-transparent" />
+      </div>
 
       {/* Content wrapper */}
       <div className="relative z-10">
@@ -476,7 +480,7 @@ export default function Dashboard() {
         {/*  HEADER                                                         */}
         {/* ============================================================== */}
         <header className="sticky top-0 z-30 border-b border-white/5 bg-gray-950/70 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 py-4 md:flex-row">
+          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:px-6 py-4 md:flex-row">
             {/* Logo + Live badge */}
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
@@ -564,10 +568,32 @@ export default function Dashboard() {
           </div>
         </header>
 
+        {/* Hero Banner */}
+        <div className="relative overflow-hidden">
+          <div className="absolute inset-0 z-0">
+            <img
+              src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=80"
+              alt=""
+              className="h-full w-full object-cover opacity-20"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-gray-950/50 via-gray-950/80 to-gray-950" />
+          </div>
+          <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 py-12 sm:py-16 md:py-20 text-center">
+            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-3 sm:mb-4 tracking-tight">
+              Smart Farming, <span className="text-emerald-400">Smarter Decisions</span>
+            </h2>
+            <p className="text-base sm:text-lg text-gray-400 max-w-2xl mx-auto">
+              {lang === "sw"
+                ? "Pata bei za soko, hali ya hewa, na ushauri wa kilimo — yote katika sehemu moja."
+                : "Get live market prices, weather forecasts, and farming advisory — all in one dashboard."}
+            </p>
+          </div>
+        </div>
+
         {/* ============================================================== */}
         {/*  MAIN CONTENT                                                   */}
         {/* ============================================================== */}
-        <main className="mx-auto max-w-7xl px-6 py-8">
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
           {/* Error */}
           {error && (
             <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300 backdrop-blur-xl">
@@ -582,12 +608,18 @@ export default function Dashboard() {
           {loading && !weather && !prices ? (
             <div className="flex h-64 items-center justify-center">
               <div className="flex flex-col items-center gap-4">
-                <Loader2 className="h-10 w-10 animate-spin text-emerald-500" />
-                <p className="text-sm text-gray-500">{t("analyzingData", lang)}</p>
+                <div className="relative">
+                  <div className="h-16 w-16 rounded-full border-2 border-emerald-500/20" />
+                  <Loader2 className="absolute inset-0 m-auto h-10 w-10 animate-spin text-emerald-500" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-gray-400">{t("analyzingData", lang)}</p>
+                  <p className="text-xs text-gray-600 mt-1">KAMIS + Mkulima Online</p>
+                </div>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3 transition-all duration-500">
               {/* ======================================================== */}
               {/*  LEFT COLUMN                                              */}
               {/* ======================================================== */}
@@ -728,7 +760,7 @@ export default function Dashboard() {
                   </div>
 
                   {/* Bar chart */}
-                  <div className="h-64">
+                  <div className="h-48 sm:h-56 md:h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={priceChartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -747,7 +779,7 @@ export default function Dashboard() {
                     <BarChartIcon className="h-5 w-5 text-cyan-400" />
                     {t("forecast14", lang)} ({t("tempRain", lang)})
                   </h2>
-                  <div className="h-72">
+                  <div className="h-48 sm:h-56 md:h-72">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={weather?.forecast ?? []}>
                         <defs>
@@ -818,6 +850,29 @@ export default function Dashboard() {
                 </div>
               </div>
 
+              {/* Section Divider */}
+              <div className="lg:col-span-3 relative my-2 overflow-hidden rounded-2xl">
+                <div className="absolute inset-0">
+                  <img
+                    src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&q=80"
+                    alt=""
+                    className="h-full w-full object-cover opacity-15"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/90 via-gray-950/70 to-gray-950/90" />
+                </div>
+                <div className="relative z-10 px-6 py-4 flex items-center gap-3">
+                  <div className="h-8 w-1 rounded-full bg-orange-500" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+                      {lang === "sw" ? "Ulinganisho wa Masoko" : "Market Intelligence"}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {lang === "sw" ? "Bei kutoka vyanzo mbalimbali" : "Multi-source price comparison across Kenya"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* ======================================================== */}
               {/*  MARKET COMPARISON (full width)                           */}
               {/* ======================================================== */}
@@ -854,7 +909,7 @@ export default function Dashboard() {
                   </div>
 
                   {/* Market comparison bar chart */}
-                  <div className="h-72 mb-4">
+                  <div className="h-48 sm:h-56 md:h-72 mb-4">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart
                         data={(showAllMarkets
@@ -891,7 +946,7 @@ export default function Dashboard() {
 
                   {/* Market table for key markets */}
                   <div className="mt-4 overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-xs sm:text-sm">
                       <thead>
                         <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-gray-500">
                           <th className="pb-2 pr-4">{t("market", lang)}</th>
@@ -954,6 +1009,29 @@ export default function Dashboard() {
                   </div>
                 </div>
               )}
+
+              {/* Section Divider */}
+              <div className="lg:col-span-3 relative my-2 overflow-hidden rounded-2xl">
+                <div className="absolute inset-0">
+                  <img
+                    src="https://images.unsplash.com/photo-1574943320219-5532a69ef5d8?w=1200&q=80"
+                    alt=""
+                    className="h-full w-full object-cover opacity-15"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/90 via-gray-950/70 to-gray-950/90" />
+                </div>
+                <div className="relative z-10 px-6 py-4 flex items-center gap-3">
+                  <div className="h-8 w-1 rounded-full bg-purple-500" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+                      {lang === "sw" ? "Uchambuzi na Utabiri" : "Analysis & Prediction"}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {lang === "sw" ? "Utabiri wa bei na mapendekezo" : "Price trends, predictions & recommendations"}
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               {/* ======================================================== */}
               {/*  PRICE ANALYSIS & PREDICTION (full width)                */}
@@ -1041,7 +1119,7 @@ export default function Dashboard() {
 
                   {/* Predictions chart */}
                   {analysisData.predictions.length > 0 && (
-                    <div className="h-56 mb-4">
+                    <div className="h-48 sm:h-56 md:h-72 mb-4">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
                           data={analysisData.predictions.map((p) => ({
@@ -1099,8 +1177,24 @@ export default function Dashboard() {
         {/* ============================================================== */}
         {/*  FOOTER                                                         */}
         {/* ============================================================== */}
-        <footer className="border-t border-white/5 py-6 text-center text-xs text-gray-600">
-          {t("footerCredits", lang)}
+        <footer className="border-t border-white/5 mt-8">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Leaf className="h-4 w-4 text-emerald-500" />
+                <span className="text-sm font-semibold text-gray-400">AgriQuant Kenya</span>
+              </div>
+              <p className="text-center text-xs text-gray-600">
+                {t("footerCredits", lang)}
+              </p>
+              <div className="flex items-center gap-3 text-xs text-gray-600">
+                <span className="flex items-center gap-1">
+                  <Database className="h-3 w-3" />
+                  KAMIS + Mkulima Online
+                </span>
+              </div>
+            </div>
+          </div>
         </footer>
       </div>
 
@@ -1113,7 +1207,7 @@ export default function Dashboard() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setChatOpen(false)} />
 
           {/* Panel */}
-          <div className="relative flex h-full w-full max-w-[400px] flex-col border-l border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-xl">
+          <div className="relative flex h-full w-full max-w-full sm:max-w-[400px] flex-col border-l border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-xl">
             {/* Chat Header */}
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div className="flex items-center gap-2">

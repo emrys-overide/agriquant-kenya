@@ -40,6 +40,80 @@ CROP_MAPPING = {
     "wheat": {"unit": "90kg Bag", "kamis_id": 3, "kg_per_unit": 90, "soko_name": "Wheat"},
 }
 
+# Reasonable per-Kg price bounds (KES) for each crop.
+# Prices outside these ranges are almost certainly data errors or extreme outliers.
+REASONABLE_PRICE_RANGES = {
+    "maize":         {"min": 25,  "max": 100},    # 90kg bag = KES 2,250–9,000
+    "tomatoes":      {"min": 20,  "max": 200},    # crate   = KES 600–6,000
+    "cabbages":      {"min": 5,   "max": 80},     # head    = KES 7.5–120
+    "onions":        {"min": 30,  "max": 200},
+    "french_beans":  {"min": 30,  "max": 250},
+    "potatoes":      {"min": 15,  "max": 120},    # 50kg bag = KES 750–6,000
+    "wheat":         {"min": 25,  "max": 150},    # 90kg bag = KES 2,250–13,500
+}
+
+
+def _is_reasonable_price(price_per_kg: float, crop: str) -> bool:
+    """Check if a per-kg price falls within the expected range for the crop."""
+    bounds = REASONABLE_PRICE_RANGES.get(crop, {"min": 1, "max": 500})
+    return bounds["min"] <= price_per_kg <= bounds["max"]
+
+
+def _filter_outliers_iqr(values: list[float]) -> list[float]:
+    """Remove extreme outliers using IQR method (1.5x interquartile range)."""
+    if len(values) < 4:
+        return values
+    s = sorted(values)
+    n = len(s)
+    q1 = s[n // 4]
+    q3 = s[3 * n // 4]
+    iqr = q3 - q1
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    return [v for v in values if lower <= v <= upper]
+
+
+def _sanitize_market_entries(
+    entries: list[dict], crop: str, kg_per_unit: float
+) -> list[dict]:
+    """
+    Filter a list of raw per-market price entries:
+      1. Drop prices outside the reasonable per-kg range for this crop.
+      2. Apply IQR outlier removal on the remaining values.
+      3. Return only clean entries.
+    """
+    clean = []
+    for e in entries:
+        ws = e.get("wholesale_per_kg")
+        rt = e.get("retail_per_kg")
+        # Keep the entry only if at least one price is reasonable
+        ws_ok = ws and _is_reasonable_price(ws, crop)
+        rt_ok = rt and _is_reasonable_price(rt, crop)
+        if ws_ok or rt_ok:
+            clean.append({
+                **e,
+                "wholesale_per_kg": ws if ws_ok else None,
+                "retail_per_kg": rt if rt_ok else None,
+            })
+
+    # IQR outlier filtering on wholesale and retail separately
+    ws_vals = [e["wholesale_per_kg"] for e in clean if e.get("wholesale_per_kg")]
+    rt_vals = [e["retail_per_kg"] for e in clean if e.get("retail_per_kg")]
+    ws_clean = set(_filter_outliers_iqr(ws_vals)) if ws_vals else set()
+    rt_clean = set(_filter_outliers_iqr(rt_vals)) if rt_vals else set()
+
+    result = []
+    for e in clean:
+        ws = e.get("wholesale_per_kg")
+        rt = e.get("retail_per_kg")
+        ws = ws if ws and ws in ws_clean else None
+        rt = rt if rt and rt in rt_clean else None
+        if ws or rt:
+            result.append({**e, "wholesale_per_kg": ws, "retail_per_kg": rt})
+
+    return result
+
+
 # User agents to prevent web scraping blocks
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36",
@@ -503,6 +577,12 @@ async def get_market_prices_by_market(crop: str):
         _merge_entries(soko_raw, "Mkulima Online")
         sources_used.append("Mkulima Online")
 
+    # --- Sanitize: filter out unreasonable prices & outliers ---
+    for key in list(all_entries.keys()):
+        all_entries[key] = _sanitize_market_entries(all_entries[key], crop, kg_per_unit)
+        if not all_entries[key]:
+            del all_entries[key]
+
     market_data = []
     data_source = "live" if sources_used else "none"
 
@@ -641,6 +721,10 @@ async def get_price_analysis(crop: str, user_lat: float = None, user_lon: float 
         sources_used.append("Mkulima Online")
 
     data_source = "live" if sources_used else "none"
+
+    # --- Sanitize live data: filter unreasonable prices & outliers ---
+    if raw_markets and data_source == "live":
+        raw_markets = _sanitize_market_entries(raw_markets, crop, kg_per_unit)
 
     # If no live data, try cache
     if not raw_markets:
