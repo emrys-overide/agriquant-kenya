@@ -21,13 +21,13 @@ from urllib.parse import urlparse, parse_qs
 WEATHER_API_KEY = "7bb7778e1e2b4ec5a7050654260506"
 
 CROP_MAPPING = {
-    "maize":         {"unit": "90kg Bag",        "kamis_id": 1,    "kg_per_unit": 90},
-    "tomatoes":      {"unit": "Crate (~30kg)",   "kamis_id": 61,   "kg_per_unit": 30},
-    "cabbages":      {"unit": "Head (~1.5kg)",   "kamis_id": 58,   "kg_per_unit": 1.5},
-    "onions":        {"unit": "Kg",               "kamis_id": None, "kg_per_unit": 1},
-    "french_beans":  {"unit": "Kg",               "kamis_id": None, "kg_per_unit": 1},
-    "potatoes":      {"unit": "50kg Bag",         "kamis_id": 57,   "kg_per_unit": 50},
-    "wheat":         {"unit": "90kg Bag",         "kamis_id": 3,    "kg_per_unit": 90},
+    "maize":         {"unit": "90kg Bag",        "kamis_id": 1,    "kg_per_unit": 90,  "soko_name": "Dry Maize"},
+    "tomatoes":      {"unit": "Crate (~30kg)",   "kamis_id": 61,   "kg_per_unit": 30,  "soko_name": "Tomatoes"},
+    "cabbages":      {"unit": "Head (~1.5kg)",   "kamis_id": 58,   "kg_per_unit": 1.5, "soko_name": "Cabbages"},
+    "onions":        {"unit": "Kg",               "kamis_id": None, "kg_per_unit": 1,   "soko_name": "Dry Onions"},
+    "french_beans":  {"unit": "Kg",               "kamis_id": None, "kg_per_unit": 1,   "soko_name": "French beans"},
+    "potatoes":      {"unit": "50kg Bag",         "kamis_id": 57,   "kg_per_unit": 50,  "soko_name": "White Irish Potatoes"},
+    "wheat":         {"unit": "90kg Bag",         "kamis_id": 3,    "kg_per_unit": 90,  "soko_name": "Wheat"},
 }
 
 USER_AGENTS = [
@@ -222,6 +222,97 @@ async def scrape_kamis_per_market(kamis_id):
     return market_data if market_data else None
 
 
+# ── Mkulima Online scraper (soko.mkulimaonline.org) ─────────────
+
+SOKO_API_URL = "https://soko.mkulimaonline.org/api/table-data/"
+
+
+def _safe_float(val):
+    """Convert a value to float safely, returning None on failure."""
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        return f if 0.1 < f < 500000 else None
+    except (ValueError, TypeError):
+        return None
+
+
+async def scrape_mkulima_online(soko_name):
+    """
+    Fetches per-market price data from Mkulima Online for a given commodity.
+    Returns a list of dicts: {market, county, wholesale_per_kg, retail_per_kg, date}
+    or None if the request fails / no data available.
+    """
+    from urllib.parse import quote
+    url = SOKO_API_URL + "?commodity=" + quote(soko_name)
+    ua = random.choice(USER_AGENTS)
+
+    try:
+        resp = await fetch(url, Object.fromEntries([
+            ["headers", Object.fromEntries([["User-Agent", ua], ["Accept", "application/json"]])],
+            ["redirect", "follow"],
+        ]))
+        if resp.status != 200:
+            return None
+        data = json.loads(await resp.text())
+    except Exception:
+        return None
+
+    if not isinstance(data, dict):
+        return None
+
+    buy_entries = data.get("buy", [])
+    sell_entries = data.get("sell", [])
+
+    market_map = {}
+
+    for item in sell_entries:
+        mkt = (item.get("market") or "").strip()
+        if not mkt:
+            continue
+        key = mkt.lower()
+        ws = _safe_float(item.get("wholesale_kg"))
+        rt = _safe_float(item.get("retail_kg"))
+        county = (item.get("county") or "").strip()
+        date_str = (item.get("date") or "").strip()
+        market_map.setdefault(key, {
+            "market": mkt, "county": county,
+            "wholesale_per_kg": None, "retail_per_kg": None, "date": date_str,
+        })
+        if ws:
+            market_map[key]["wholesale_per_kg"] = ws
+        if rt:
+            market_map[key]["retail_per_kg"] = rt
+        if date_str and not market_map[key]["date"]:
+            market_map[key]["date"] = date_str
+
+    for item in buy_entries:
+        mkt = (item.get("market") or "").strip()
+        if not mkt:
+            continue
+        key = mkt.lower()
+        rt = _safe_float(item.get("retail_kg"))
+        ws = _safe_float(item.get("wholesale_kg"))
+        county = (item.get("county") or "").strip()
+        date_str = (item.get("date") or "").strip()
+
+        if key not in market_map:
+            market_map[key] = {
+                "market": mkt, "county": county,
+                "wholesale_per_kg": None, "retail_per_kg": None, "date": date_str,
+            }
+        if rt and not market_map[key]["retail_per_kg"]:
+            market_map[key]["retail_per_kg"] = rt
+        if ws and not market_map[key]["wholesale_per_kg"]:
+            market_map[key]["wholesale_per_kg"] = ws
+        if date_str and not market_map[key]["date"]:
+            market_map[key]["date"] = date_str
+
+    result = [v for v in market_map.values() if v["wholesale_per_kg"] or v["retail_per_kg"]]
+    return result if result else None
+
+
 # ── Request router ─────────────────────────────────────────────────
 
 async def on_fetch(request, env):
@@ -295,7 +386,7 @@ async def on_fetch(request, env):
             "agri_risk_alerts": risk_alerts,
         })
 
-    # ── GET /api/prices/<crop>/markets ──────────────────────────────
+    # ── GET /api/prices/<crop>/markets (Multi-Source) ──────────────
     m = re.match(r"^/api/prices/(.+)/markets$", path)
     if m and request.method == "GET":
         crop = m.group(1).lower()
@@ -304,6 +395,7 @@ async def on_fetch(request, env):
 
         crop_info = CROP_MAPPING[crop]
         kamis_id = crop_info["kamis_id"]
+        soko_name = crop_info.get("soko_name", "")
         kg_per_unit = crop_info["kg_per_unit"]
 
         baselines_per_kg = {
@@ -316,61 +408,96 @@ async def on_fetch(request, env):
             "wheat": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 93, "kitale": 88},
         }
 
+        # Fetch from both sources concurrently
+        import asyncio
+
+        async def _fetch_kamis():
+            if kamis_id is not None:
+                return await scrape_kamis_per_market(kamis_id)
+            return None
+
+        async def _fetch_soko():
+            if soko_name:
+                return await scrape_mkulima_online(soko_name)
+            return None
+
+        kamis_raw, soko_raw = await asyncio.gather(_fetch_kamis(), _fetch_soko())
+
+        sources_used = []
+        all_entries = {}
+
+        def merge_entries(entries, source_tag):
+            for e in entries:
+                name = e["market"].strip()
+                if not name:
+                    continue
+                key = name.lower()
+                all_entries.setdefault(key, [])
+                all_entries[key].append({**e, "_source": source_tag})
+
+        if kamis_raw:
+            merge_entries(kamis_raw, "KAMIS")
+            sources_used.append("KAMIS")
+        if soko_raw:
+            merge_entries(soko_raw, "Mkulima Online")
+            sources_used.append("Mkulima Online")
+
         market_data = []
-        data_source = "live"
+        data_source = "live" if sources_used else "none"
 
-        if kamis_id is not None:
-            raw_markets = await scrape_kamis_per_market(kamis_id)
-            if raw_markets:
-                grouped = {}
-                for entry in raw_markets:
-                    name = entry["market"].strip()
-                    if name:
-                        grouped.setdefault(name.lower(), []).append(entry)
+        def _med(vals):
+            if not vals:
+                return None
+            s = sorted(vals)
+            return s[len(s) // 2]
 
-                for mkt_key, entries in grouped.items():
-                    ws_vals = sorted([e["wholesale_per_kg"] for e in entries if e["wholesale_per_kg"]])
-                    rt_vals = sorted([e["retail_per_kg"] for e in entries if e["retail_per_kg"]])
+        for mkt_key, entries in all_entries.items():
+            ws_vals = [e["wholesale_per_kg"] for e in entries if e.get("wholesale_per_kg")]
+            rt_vals = [e["retail_per_kg"] for e in entries if e.get("retail_per_kg")]
 
-                    def _med(vals):
-                        n = len(vals)
-                        return vals[n // 2] if n else None
+            ws = _med(ws_vals)
+            rt = _med(rt_vals)
+            latest = ""
+            for e in entries:
+                if e.get("date") and e["date"] > latest:
+                    latest = e["date"]
+            county = entries[0].get("county", "")
+            entry_sources = list(set(e["_source"] for e in entries))
 
-                    ws = _med(ws_vals)
-                    rt = _med(rt_vals)
-                    latest = ""
-                    for e in entries:
-                        if e["date"] and e["date"] > latest:
-                            latest = e["date"]
-                    county = entries[0]["county"]
-
-                    market_data.append({
-                        "market": entries[0]["market"],
-                        "county": county,
-                        "wholesale_per_kg": round(ws, 2) if ws else None,
-                        "retail_per_kg": round(rt, 2) if rt else None,
-                        "wholesale_per_unit": round(ws * kg_per_unit, 2) if ws else None,
-                        "retail_per_unit": round(rt * kg_per_unit, 2) if rt else None,
-                        "date": latest,
-                        "is_key_market": mkt_key in KEY_MARKETS,
-                    })
+            market_data.append({
+                "market": entries[0]["market"],
+                "county": county,
+                "wholesale_price": round(ws * kg_per_unit, 2) if ws else None,
+                "retail_price": round(rt * kg_per_unit, 2) if rt else None,
+                "date": latest,
+                "is_key_market": mkt_key in KEY_MARKETS,
+                "sources": entry_sources,
+            })
 
         if not market_data:
             data_source = "baseline"
+            sources_used = ["baseline"]
             crop_baselines = baselines_per_kg.get(crop, {})
             for mkt_name, base_price in crop_baselines.items():
                 market_data.append({
                     "market": mkt_name.capitalize(),
                     "county": mkt_name.capitalize(),
-                    "wholesale_per_kg": round(base_price, 2),
-                    "retail_per_kg": round(base_price * 1.35, 2),
-                    "wholesale_per_unit": round(base_price * kg_per_unit, 2),
-                    "retail_per_unit": round(base_price * 1.35 * kg_per_unit, 2),
+                    "wholesale_price": round(base_price * kg_per_unit, 2),
+                    "retail_price": round(base_price * 1.35 * kg_per_unit, 2),
                     "date": "estimated",
                     "is_key_market": mkt_name.lower() in KEY_MARKETS,
+                    "sources": ["baseline"],
                 })
 
-        market_data.sort(key=lambda x: (not x["is_key_market"], -(x["retail_per_kg"] or 0)))
+        market_data.sort(key=lambda x: (not x["is_key_market"], -(x["retail_price"] or 0)))
+
+        source_label = " + ".join(sources_used) if sources_used else "none"
+        if data_source == "live":
+            status_text = "Live from " + source_label + " (" + str(len(market_data)) + " markets)"
+        elif data_source == "baseline":
+            status_text = "Estimated baseline prices"
+        else:
+            status_text = "No data available"
 
         return json_response({
             "crop": crop.capitalize(),
@@ -378,29 +505,58 @@ async def on_fetch(request, env):
             "kg_per_unit": kg_per_unit,
             "markets": market_data,
             "data_source": data_source,
-            "data_status": "Live from KAMIS (" + str(len(market_data)) + " markets)" if data_source == "live" else "Estimated baseline prices",
+            "data_sources": sources_used,
+            "data_status": status_text,
         })
 
-    # ── GET /api/analysis/<crop> ────────────────────────────────────
+    # ── GET /api/analysis/<crop> (Multi-Source) ────────────────────
     m = re.match(r"^/api/analysis/(.+)$", path)
     if m and request.method == "GET":
         import math
+        import asyncio as aio
+
         crop = m.group(1).lower()
         if crop not in CROP_MAPPING:
             return error_response("Crop not supported.", 400)
 
         crop_info = CROP_MAPPING[crop]
         kamis_id = crop_info["kamis_id"]
+        soko_name = crop_info.get("soko_name", "")
         kg_per_unit = crop_info["kg_per_unit"]
+        unit_name = crop_info["unit"]
 
         user_lat = float(query.get("user_lat", [None])[0]) if query.get("user_lat") else None
         user_lon = float(query.get("user_lon", [None])[0]) if query.get("user_lon") else None
 
+        async def _fetch_kamis_a():
+            if kamis_id is not None:
+                return await scrape_kamis_per_market(kamis_id)
+            return None
+
+        async def _fetch_soko_a():
+            if soko_name:
+                return await scrape_mkulima_online(soko_name)
+            return None
+
+        kamis_raw, soko_raw = await aio.gather(_fetch_kamis_a(), _fetch_soko_a())
+
+        sources_used = []
         raw_markets = []
-        if kamis_id is not None:
-            raw_markets = await scrape_kamis_per_market(kamis_id) or []
+
+        if kamis_raw:
+            for e in kamis_raw:
+                raw_markets.append({**e, "_source": "KAMIS"})
+            sources_used.append("KAMIS")
+        if soko_raw:
+            for e in soko_raw:
+                raw_markets.append({**e, "_source": "Mkulima Online"})
+            sources_used.append("Mkulima Online")
+
+        data_source = "live" if sources_used else "none"
 
         if not raw_markets:
+            data_source = "baseline"
+            sources_used = ["baseline"]
             baselines = {
                 "maize": {"Nairobi": 55, "Nyeri": 48, "Nakuru": 50},
                 "tomatoes": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
@@ -411,12 +567,13 @@ async def on_fetch(request, env):
                 "wheat": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
             }
             crop_base = baselines.get(crop, {"Nairobi": 50, "Nyeri": 45, "Nakuru": 48})
-            for mkt, price in crop_base.items():
+            for mkt, price_per_kg in crop_base.items():
                 raw_markets.append({
                     "market": mkt, "county": mkt,
-                    "wholesale_per_kg": price,
-                    "retail_per_kg": round(price * 1.35, 2),
+                    "wholesale_per_kg": price_per_kg,
+                    "retail_per_kg": round(price_per_kg * 1.35, 2),
                     "date": "baseline",
+                    "_source": "baseline",
                 })
 
         grouped = {}
@@ -430,26 +587,24 @@ async def on_fetch(request, env):
         all_wholesale = []
 
         for mkt_key, entries in grouped.items():
-            ws_vals = [e["wholesale_per_kg"] for e in entries if e.get("wholesale_per_kg")]
-            rt_vals = [e["retail_per_kg"] for e in entries if e.get("retail_per_kg")]
+            ws_vals = [e["wholesale_per_kg"] * kg_per_unit for e in entries if e.get("wholesale_per_kg")]
+            rt_vals = [e["retail_per_kg"] * kg_per_unit for e in entries if e.get("retail_per_kg")]
             if not rt_vals and not ws_vals:
                 continue
 
-            def _med2(v):
+            def _med3(v):
                 vs = sorted(v)
                 return vs[len(vs) // 2] if vs else 0
 
-            ws_med = round(_med2(ws_vals), 2) if ws_vals else 0
-            rt_med = round(_med2(rt_vals), 2) if rt_vals else round(ws_med * 1.3, 2)
+            ws_med = round(_med3(ws_vals), 2) if ws_vals else 0
+            rt_med = round(_med3(rt_vals), 2) if rt_vals else round(ws_med * 1.3, 2)
             margin_pct = round(((rt_med - ws_med) / ws_med) * 100, 1) if ws_med else 0
 
             market_summaries.append({
                 "market": entries[0]["market"],
                 "county": entries[0].get("county", ""),
-                "wholesale_per_kg": ws_med,
-                "retail_per_kg": rt_med,
-                "wholesale_per_unit": round(ws_med * kg_per_unit, 2),
-                "retail_per_unit": round(rt_med * kg_per_unit, 2),
+                "wholesale_price": ws_med,
+                "retail_price": rt_med,
                 "margin_pct": margin_pct,
                 "is_key_market": mkt_key in KEY_MARKETS,
             })
@@ -471,17 +626,17 @@ async def on_fetch(request, env):
         price_spread = round(max_retail - min_retail, 2)
         cv = round((std_retail / avg_retail) * 100, 1) if avg_retail else 0
 
-        market_summaries.sort(key=lambda x: x["retail_per_kg"], reverse=True)
+        market_summaries.sort(key=lambda x: x["retail_price"], reverse=True)
         best_market = market_summaries[0] if market_summaries else None
         worst_market = market_summaries[-1] if market_summaries else None
-        by_ws = sorted(market_summaries, key=lambda x: x["wholesale_per_kg"])
+        by_ws = sorted(market_summaries, key=lambda x: x["wholesale_price"])
         cheapest_source = by_ws[0] if by_ws else None
 
         predictions = []
         for ms in market_summaries[:8]:
-            deviation = ((ms["retail_per_kg"] - avg_retail) / avg_retail * 100) if avg_retail else 0
+            deviation = ((ms["retail_price"] - avg_retail) / avg_retail * 100) if avg_retail else 0
             predicted_change_pct = round(-deviation * 0.3, 1)
-            predicted_retail = round(ms["retail_per_kg"] * (1 + predicted_change_pct / 100), 2)
+            predicted_retail = round(ms["retail_price"] * (1 + predicted_change_pct / 100), 2)
 
             if predicted_change_pct > 3:
                 trend = "rising"
@@ -495,8 +650,8 @@ async def on_fetch(request, env):
 
             predictions.append({
                 "market": ms["market"],
-                "current_retail_per_kg": ms["retail_per_kg"],
-                "predicted_retail_per_kg": predicted_retail,
+                "current_price": ms["retail_price"],
+                "predicted_price": predicted_retail,
                 "predicted_change_pct": predicted_change_pct,
                 "trend": trend,
                 "trend_emoji": emoji,
@@ -522,11 +677,11 @@ async def on_fetch(request, env):
         if best_market and cheapest_source:
             advice_lines.append(
                 "🏆 Best market to sell " + crop.capitalize() + ": " + best_market["market"] +
-                " (KES " + str(best_market["retail_per_kg"]) + "/kg retail)"
+                " (KES " + str(best_market["retail_price"]) + "/" + unit_name + " retail)"
             )
             advice_lines.append(
                 "🛒 Cheapest source: " + cheapest_source["market"] +
-                " (KES " + str(cheapest_source["wholesale_per_kg"]) + "/kg wholesale)"
+                " (KES " + str(cheapest_source["wholesale_price"]) + "/" + unit_name + " wholesale)"
             )
 
         if cv < 15:
@@ -536,7 +691,7 @@ async def on_fetch(request, env):
         else:
             advice_lines.append(
                 "📊 High price disparity (CV " + str(cv) + "%) — significant arbitrage opportunity! " +
-                "Spread: KES " + str(price_spread) + "/kg between cheapest and most expensive market."
+                "Spread: KES " + str(price_spread) + "/" + unit_name + " between cheapest and most expensive market."
             )
 
         if nearest_market:
@@ -544,25 +699,30 @@ async def on_fetch(request, env):
                 "📍 Nearest major market: " + nearest_market.capitalize() + " (" + str(distance_km) + " km away)"
             )
 
+        if sources_used:
+            advice_lines.append("📡 Data sources: " + ", ".join(sources_used))
+
         return json_response({
             "crop": crop.capitalize(),
-            "unit": crop_info["unit"],
+            "unit": unit_name,
             "kg_per_unit": kg_per_unit,
+            "data_source": data_source,
+            "data_sources": sources_used,
             "market_analysis": market_summaries[:15],
             "statistics": {
-                "avg_retail_per_kg": avg_retail,
-                "avg_wholesale_per_kg": avg_wholesale,
-                "price_spread_per_kg": price_spread,
-                "min_retail_per_kg": min_retail,
-                "max_retail_per_kg": max_retail,
+                "avg_retail": avg_retail,
+                "avg_wholesale": avg_wholesale,
+                "price_spread": price_spread,
+                "min_retail": min_retail,
+                "max_retail": max_retail,
                 "volatility_cv_pct": cv,
             },
             "predictions": predictions,
             "recommendation": {
                 "best_sell_market": best_market["market"] if best_market else None,
-                "best_sell_price": best_market["retail_per_kg"] if best_market else None,
+                "best_sell_price": best_market["retail_price"] if best_market else None,
                 "cheapest_buy_market": cheapest_source["market"] if cheapest_source else None,
-                "cheapest_buy_price": cheapest_source["wholesale_per_kg"] if cheapest_source else None,
+                "cheapest_buy_price": cheapest_source["wholesale_price"] if cheapest_source else None,
             },
             "nearest_market": nearest_market.capitalize() if nearest_market else None,
             "distance_km": distance_km,

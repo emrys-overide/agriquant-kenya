@@ -25,6 +25,7 @@ import {
   Minus,
   Crosshair,
   BarChart3,
+  Database,
 } from "lucide-react";
 import {
   Area,
@@ -82,12 +83,11 @@ type PriceData = {
 type MarketEntry = {
   market: string;
   county: string;
-  wholesale_per_kg: number | null;
-  retail_per_kg: number | null;
-  wholesale_per_unit: number | null;
-  retail_per_unit: number | null;
+  wholesale_price: number | null;
+  retail_price: number | null;
   date: string;
   is_key_market: boolean;
+  sources?: string[];
 };
 
 type MarketComparisonData = {
@@ -96,24 +96,23 @@ type MarketComparisonData = {
   kg_per_unit: number;
   markets: MarketEntry[];
   data_source: string;
+  data_sources?: string[];
   data_status: string;
 };
 
 type MarketAnalysisEntry = {
   market: string;
   county: string;
-  wholesale_per_kg: number;
-  retail_per_kg: number;
-  wholesale_per_unit: number;
-  retail_per_unit: number;
+  wholesale_price: number;
+  retail_price: number;
   margin_pct: number;
   is_key_market: boolean;
 };
 
 type Prediction = {
   market: string;
-  current_retail_per_kg: number;
-  predicted_retail_per_kg: number;
+  current_price: number;
+  predicted_price: number;
   predicted_change_pct: number;
   trend: "rising" | "falling" | "stable";
   trend_emoji: string;
@@ -123,13 +122,14 @@ type Prediction = {
 type AnalysisData = {
   crop: string;
   unit: string;
+  kg_per_unit: number;
   market_analysis: MarketAnalysisEntry[];
   statistics: {
-    avg_retail_per_kg: number;
-    avg_wholesale_per_kg: number;
-    price_spread_per_kg: number;
-    min_retail_per_kg: number;
-    max_retail_per_kg: number;
+    avg_retail: number;
+    avg_wholesale: number;
+    price_spread: number;
+    min_retail: number;
+    max_retail: number;
     volatility_cv_pct: number;
   };
   predictions: Prediction[];
@@ -142,6 +142,8 @@ type AnalysisData = {
   nearest_market: string | null;
   distance_km: number | null;
   advisory: string;
+  data_source: string;
+  data_sources?: string[];
 };
 
 type AdviceData = {
@@ -824,9 +826,16 @@ export default function Dashboard() {
                   <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="flex items-center gap-2 text-base font-semibold text-gray-200">
                       <MapPin className="h-5 w-5 text-orange-400" />
-                      {t("marketComparison", lang)}: {marketData.crop} ({t("perKg", lang)})
+                      {t("marketComparison", lang)}: {marketData.crop} ({marketData.unit})
                     </h2>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Data source badges */}
+                      {marketData.data_sources && marketData.data_sources.length > 0 && (
+                        <span className="flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-2.5 py-1 text-xs font-medium text-indigo-400">
+                          <Database className="h-3 w-3" />
+                          {marketData.data_sources.join(" + ")}
+                        </span>
+                      )}
                       {/* Nearest market badge */}
                       {analysisData?.nearest_market && (
                         <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400">
@@ -852,12 +861,12 @@ export default function Dashboard() {
                           ? marketData.markets
                           : marketData.markets.filter((m) => m.is_key_market)
                         )
-                          .filter((m) => m.retail_per_kg !== null)
+                          .filter((m) => m.retail_price !== null)
                           .slice(0, 12)
                           .map((m) => ({
                             name: m.market,
-                            Wholesale: m.wholesale_per_kg ?? 0,
-                            Retail: m.retail_per_kg ?? 0,
+                            Wholesale: m.wholesale_price ?? 0,
+                            Retail: m.retail_price ?? 0,
                           }))}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -873,10 +882,10 @@ export default function Dashboard() {
                   {/* Legend for market comparison */}
                   <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-blue-500" /> {t("wholesale", lang)} (KES/kg)
+                      <span className="h-2 w-4 rounded-sm bg-blue-500" /> {t("wholesale", lang)} (KES)
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-emerald-500" /> {t("retail", lang)} (KES/kg)
+                      <span className="h-2 w-4 rounded-sm bg-emerald-500" /> {t("retail", lang)} (KES)
                     </span>
                   </div>
 
@@ -886,8 +895,8 @@ export default function Dashboard() {
                       <thead>
                         <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-gray-500">
                           <th className="pb-2 pr-4">{t("market", lang)}</th>
-                          <th className="pb-2 pr-4 text-right">{t("wholesale", lang)}/kg</th>
-                          <th className="pb-2 pr-4 text-right">{t("retail", lang)}/kg</th>
+                          <th className="pb-2 pr-4 text-right">{t("wholesale", lang)}</th>
+                          <th className="pb-2 pr-4 text-right">{t("retail", lang)}</th>
                           <th className="pb-2 text-right">{t("trend", lang)}</th>
                         </tr>
                       </thead>
@@ -896,7 +905,7 @@ export default function Dashboard() {
                           ? marketData.markets
                           : marketData.markets.filter((m) => m.is_key_market)
                         )
-                          .filter((m) => m.retail_per_kg !== null)
+                          .filter((m) => m.retail_price !== null)
                           .slice(0, 10)
                           .map((m) => {
                             const prediction = analysisData?.predictions?.find(
@@ -913,10 +922,10 @@ export default function Dashboard() {
                                   </div>
                                 </td>
                                 <td className="py-2 pr-4 text-right text-blue-400">
-                                  KES {m.wholesale_per_kg?.toLocaleString() ?? "—"}
+                                  KES {m.wholesale_price?.toLocaleString() ?? "—"}
                                 </td>
                                 <td className="py-2 pr-4 text-right text-emerald-400">
-                                  KES {m.retail_per_kg?.toLocaleString() ?? "—"}
+                                  KES {m.retail_price?.toLocaleString() ?? "—"}
                                 </td>
                                 <td className="py-2 text-right">
                                   {prediction ? (
@@ -951,29 +960,37 @@ export default function Dashboard() {
               {/* ======================================================== */}
               {analysisData && (
                 <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-6 shadow-2xl shadow-purple-500/5 backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-purple-500/30">
-                  <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-purple-300">
-                    <BarChart3 className="h-5 w-5 text-purple-400" />
-                    {t("analysisPrediction", lang)}: {analysisData.crop}
-                  </h2>
+                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <h2 className="flex items-center gap-2 text-base font-semibold text-purple-300">
+                      <BarChart3 className="h-5 w-5 text-purple-400" />
+                      {t("analysisPrediction", lang)}: {analysisData.crop}
+                    </h2>
+                    {analysisData.data_sources && analysisData.data_sources.length > 0 && (
+                      <span className="flex items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-300">
+                        <Database className="h-3 w-3" />
+                        {analysisData.data_sources.join(" + ")}
+                      </span>
+                    )}
+                  </div>
 
                   {/* Stats row */}
                   <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("avgRetail", lang)}</p>
                       <p className="text-lg font-bold text-emerald-400">
-                        KES {analysisData.statistics.avg_retail_per_kg.toLocaleString()}
+                        KES {analysisData.statistics.avg_retail.toLocaleString()}
                       </p>
                     </div>
                     <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("avgWholesale", lang)}</p>
                       <p className="text-lg font-bold text-blue-400">
-                        KES {analysisData.statistics.avg_wholesale_per_kg.toLocaleString()}
+                        KES {analysisData.statistics.avg_wholesale.toLocaleString()}
                       </p>
                     </div>
                     <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("priceSpread", lang)}</p>
                       <p className="text-lg font-bold text-amber-400">
-                        KES {analysisData.statistics.price_spread_per_kg.toLocaleString()}
+                        KES {analysisData.statistics.price_spread.toLocaleString()}
                       </p>
                     </div>
                     <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
@@ -1002,7 +1019,7 @@ export default function Dashboard() {
                           {analysisData.recommendation.best_sell_market}
                         </p>
                         <p className="text-sm text-emerald-400">
-                          KES {analysisData.recommendation.best_sell_price?.toLocaleString()}/kg
+                          KES {analysisData.recommendation.best_sell_price?.toLocaleString()}/{analysisData.unit}
                         </p>
                       </div>
                     )}
@@ -1016,7 +1033,7 @@ export default function Dashboard() {
                           {analysisData.recommendation.cheapest_buy_market}
                         </p>
                         <p className="text-sm text-blue-400">
-                          KES {analysisData.recommendation.cheapest_buy_price?.toLocaleString()}/kg
+                          KES {analysisData.recommendation.cheapest_buy_price?.toLocaleString()}/{analysisData.unit}
                         </p>
                       </div>
                     )}
@@ -1029,8 +1046,8 @@ export default function Dashboard() {
                         <BarChart
                           data={analysisData.predictions.map((p) => ({
                             name: p.market,
-                            [t("current", lang)]: p.current_retail_per_kg,
-                            [t("predicted", lang)]: p.predicted_retail_per_kg,
+                            [t("current", lang)]: p.current_price,
+                            [t("predicted", lang)]: p.predicted_price,
                           }))}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -1047,10 +1064,10 @@ export default function Dashboard() {
                   {/* Prediction legend */}
                   <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-violet-500" /> {t("current", lang)} (KES/kg)
+                      <span className="h-2 w-4 rounded-sm bg-violet-500" /> {t("current", lang)} (KES)
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-purple-300" /> {t("predicted", lang)} (KES/kg)
+                      <span className="h-2 w-4 rounded-sm bg-purple-300" /> {t("predicted", lang)} (KES)
                     </span>
                   </div>
 
