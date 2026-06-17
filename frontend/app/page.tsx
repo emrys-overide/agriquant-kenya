@@ -26,6 +26,8 @@ import {
   Crosshair,
   BarChart3,
   Database,
+  ShoppingCart,
+  Wheat,
 } from "lucide-react";
 import {
   Area,
@@ -469,9 +471,14 @@ export default function Dashboard() {
     <div className="relative min-h-screen overflow-hidden overflow-x-hidden bg-gray-950 font-sans text-gray-100">
       {/* Layered background */}
       <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-emerald-950/20 to-gray-950" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/10 via-transparent to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-96 bg-gradient-to-t from-emerald-950/10 to-transparent" />
+        <img
+          src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=60"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-[0.07] animate-slow-drift"
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-emerald-950/25 to-gray-950" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/15 via-transparent to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-96 bg-gradient-to-t from-emerald-950/15 to-transparent" />
       </div>
 
       {/* Content wrapper */}
@@ -574,20 +581,32 @@ export default function Dashboard() {
             <img
               src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=80"
               alt=""
-              className="h-full w-full object-cover opacity-20"
+              className="h-full w-full object-cover opacity-40 animate-slow-drift"
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-gray-950/50 via-gray-950/80 to-gray-950" />
+            <div className="absolute inset-0 bg-gradient-to-b from-gray-950/20 via-gray-950/40 to-gray-950" />
+            <div className="absolute inset-0 bg-gradient-to-r from-amber-900/10 via-transparent to-emerald-900/10" />
           </div>
-          <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 py-12 sm:py-16 md:py-20 text-center">
-            <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold text-white mb-3 sm:mb-4 tracking-tight">
-              Smart Farming, <span className="text-emerald-400">Smarter Decisions</span>
+          <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 md:py-32 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 mb-5 backdrop-blur-sm">
+              <Sprout className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="text-xs font-medium text-emerald-300">
+                {lang === "sw" ? "Dashibodi ya Kilimo cha Kisasa" : "Agricultural Intelligence Platform"}
+              </span>
+            </div>
+            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-5 tracking-tight leading-tight">
+              Smart Farming,{" "}
+              <span className="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
+                Smarter Decisions
+              </span>
             </h2>
-            <p className="text-base sm:text-lg text-gray-400 max-w-2xl mx-auto">
+            <p className="text-base sm:text-lg text-gray-300 max-w-2xl mx-auto leading-relaxed">
               {lang === "sw"
                 ? "Pata bei za soko, hali ya hewa, na ushauri wa kilimo — yote katika sehemu moja."
                 : "Get live market prices, weather forecasts, and farming advisory — all in one dashboard."}
             </p>
           </div>
+          {/* Bottom glow line */}
+          <div className="relative z-10 h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
         </div>
 
         {/* ============================================================== */}
@@ -625,7 +644,7 @@ export default function Dashboard() {
               {/* ======================================================== */}
               <div className="space-y-6 lg:col-span-1">
                 {/* Weather Card */}
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.07]">
+                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-emerald-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-emerald-500/10">
                   <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-gray-200">
                     <Cloud className="h-5 w-5 text-blue-400" />
                     {t("liveWeather", lang)}: {weather?.location ?? t("unavailable", lang)}
@@ -647,28 +666,28 @@ export default function Dashboard() {
 
                   {/* Sub-cards */}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-white/5 bg-white/5 p-3">
+                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-blue-500/8 to-transparent p-3">
                       <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-500">
                         <Droplets className="h-3.5 w-3.5 text-blue-400" />
                         {t("humidity", lang)}
                       </div>
                       <p className="text-lg font-bold text-white">{weather?.humidity ?? "--"}%</p>
-                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-700">
+                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-700/50">
                         <div
-                          className="h-full rounded-full bg-blue-500 transition-all duration-700"
+                          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-700"
                           style={{ width: `${weather?.humidity ?? 0}%` }}
                         />
                       </div>
                     </div>
-                    <div className="rounded-xl border border-white/5 bg-white/5 p-3">
+                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-emerald-500/8 to-transparent p-3">
                       <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-500">
                         <Sprout className="h-3.5 w-3.5 text-emerald-400" />
                         {t("soilMoistureEst", lang)}
                       </div>
                       <p className="text-lg font-bold text-white">{weather?.soil_moisture_estimate?.toFixed(1) ?? "--"}%</p>
-                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-gray-700">
+                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-700/50">
                         <div
-                          className="h-full rounded-full bg-emerald-500 transition-all duration-700"
+                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700"
                           style={{ width: `${weather?.soil_moisture_estimate ?? 0}%` }}
                         />
                       </div>
@@ -685,7 +704,7 @@ export default function Dashboard() {
 
                 {/* Agricultural Risks */}
                 {weather && weather.agri_risk_alerts.length > 0 && (
-                  <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-6 shadow-2xl shadow-red-500/5 backdrop-blur-xl">
+                  <div className="rounded-2xl border border-red-500/25 bg-red-500/8 p-6 shadow-2xl shadow-red-500/8 ring-1 ring-red-500/[0.08] inset backdrop-blur-xl">
                     <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-red-400">
                       <AlertTriangle className="h-5 w-5" />
                       {t("agriculturalRisks", lang)}
@@ -707,7 +726,7 @@ export default function Dashboard() {
               {/* ======================================================== */}
               <div className="space-y-6 lg:col-span-2">
                 {/* Market Intelligence */}
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.07]">
+                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-amber-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-amber-500/10">
                   <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="flex items-center gap-2 text-base font-semibold text-gray-200">
                       <TrendingUp className="h-5 w-5 text-emerald-400" />
@@ -733,27 +752,39 @@ export default function Dashboard() {
 
                   {/* Price metric cards */}
                   <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-center transition hover:bg-amber-500/10">
-                      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-amber-500/70">
-                        {t("farmGate", lang)}
-                      </p>
-                      <p className="text-2xl font-bold text-amber-400">
+                    <div className="relative overflow-hidden rounded-xl border border-amber-500/25 bg-amber-500/8 p-4 text-center ring-1 ring-amber-500/[0.06] inset transition hover:bg-amber-500/12">
+                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-400 to-orange-400" />
+                      <div className="mb-2 flex items-center justify-center gap-1.5">
+                        <Wheat className="h-4 w-4 text-amber-500/60" />
+                        <p className="text-xs font-medium uppercase tracking-wider text-amber-500/70">
+                          {t("farmGate", lang)}
+                        </p>
+                      </div>
+                      <p className="text-3xl font-bold text-amber-400">
                         KES {prices?.farm_gate_price_ksh?.toLocaleString() ?? "N/A"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-center transition hover:bg-blue-500/10">
-                      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-blue-500/70">
-                        {t("wholesale", lang)}
-                      </p>
-                      <p className="text-2xl font-bold text-blue-400">
+                    <div className="relative overflow-hidden rounded-xl border border-blue-500/25 bg-blue-500/8 p-4 text-center ring-1 ring-blue-500/[0.06] inset transition hover:bg-blue-500/12">
+                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400" />
+                      <div className="mb-2 flex items-center justify-center gap-1.5">
+                        <BarChart3 className="h-4 w-4 text-blue-500/60" />
+                        <p className="text-xs font-medium uppercase tracking-wider text-blue-500/70">
+                          {t("wholesale", lang)}
+                        </p>
+                      </div>
+                      <p className="text-3xl font-bold text-blue-400">
                         KES {prices?.wholesale_price_ksh?.toLocaleString() ?? "N/A"}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-center transition hover:bg-emerald-500/10">
-                      <p className="mb-1 text-xs font-medium uppercase tracking-wider text-emerald-500/70">
-                        {t("retail", lang)}
-                      </p>
-                      <p className="text-2xl font-bold text-emerald-400">
+                    <div className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-4 text-center ring-1 ring-emerald-500/[0.06] inset transition hover:bg-emerald-500/12">
+                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-teal-400" />
+                      <div className="mb-2 flex items-center justify-center gap-1.5">
+                        <ShoppingCart className="h-4 w-4 text-emerald-500/60" />
+                        <p className="text-xs font-medium uppercase tracking-wider text-emerald-500/70">
+                          {t("retail", lang)}
+                        </p>
+                      </div>
+                      <p className="text-3xl font-bold text-emerald-400">
                         KES {prices?.retail_price_ksh?.toLocaleString() ?? "N/A"}
                       </p>
                     </div>
@@ -774,7 +805,7 @@ export default function Dashboard() {
                 </div>
 
                 {/* 14-Day Forecast */}
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.07]">
+                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-cyan-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-cyan-500/10">
                   <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-gray-200">
                     <BarChartIcon className="h-5 w-5 text-cyan-400" />
                     {t("forecast14", lang)} ({t("tempRain", lang)})
@@ -851,22 +882,23 @@ export default function Dashboard() {
               </div>
 
               {/* Section Divider */}
-              <div className="lg:col-span-3 relative my-2 overflow-hidden rounded-2xl">
+              <div className="lg:col-span-3 relative my-4 overflow-hidden rounded-2xl">
                 <div className="absolute inset-0">
                   <img
-                    src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1200&q=80"
+                    src="https://images.unsplash.com/photo-1592982537447-6f2a6a0c1b36?w=1200&q=80"
                     alt=""
-                    className="h-full w-full object-cover opacity-15"
+                    className="h-full w-full object-cover opacity-35 animate-slow-drift"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/90 via-gray-950/70 to-gray-950/90" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/80 via-gray-950/40 to-gray-950/80" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 via-transparent to-amber-500/5" />
                 </div>
-                <div className="relative z-10 px-6 py-4 flex items-center gap-3">
-                  <div className="h-8 w-1 rounded-full bg-orange-500" />
+                <div className="relative z-10 px-6 py-6 flex items-center gap-4">
+                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-orange-400 to-amber-500" />
                   <div>
-                    <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       {lang === "sw" ? "Ulinganisho wa Masoko" : "Market Intelligence"}
                     </h3>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-400 mt-0.5">
                       {lang === "sw" ? "Bei kutoka vyanzo mbalimbali" : "Multi-source price comparison across Kenya"}
                     </p>
                   </div>
@@ -877,7 +909,7 @@ export default function Dashboard() {
               {/*  MARKET COMPARISON (full width)                           */}
               {/* ======================================================== */}
               {marketData && marketData.markets.length > 0 && (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.07]">
+                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-orange-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-orange-500/10">
                   <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="flex items-center gap-2 text-base font-semibold text-gray-200">
                       <MapPin className="h-5 w-5 text-orange-400" />
@@ -962,16 +994,20 @@ export default function Dashboard() {
                         )
                           .filter((m) => m.retail_price !== null)
                           .slice(0, 10)
-                          .map((m) => {
+                          .map((m, idx) => {
                             const prediction = analysisData?.predictions?.find(
                               (p) => p.market.toLowerCase() === m.market.toLowerCase()
                             );
+                            const isBestMarket = analysisData?.recommendation?.best_sell_market?.toLowerCase() === m.market.toLowerCase();
                             return (
-                              <tr key={m.market} className="text-gray-300 hover:bg-white/[0.02]">
-                                <td className="py-2 pr-4 font-medium">
+                              <tr key={m.market} className={`text-gray-300 transition-colors hover:bg-white/[0.04] ${idx % 2 === 1 ? "bg-white/[0.02]" : ""} ${isBestMarket ? "border-l-2 border-l-emerald-500/50" : ""}`}>
+                                <td className="py-2.5 pr-4 font-medium">
                                   <div className="flex items-center gap-2">
                                     {m.is_key_market && (
                                       <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                                    )}
+                                    {isBestMarket && (
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-glow-pulse" />
                                     )}
                                     {m.market}
                                   </div>
@@ -1011,22 +1047,23 @@ export default function Dashboard() {
               )}
 
               {/* Section Divider */}
-              <div className="lg:col-span-3 relative my-2 overflow-hidden rounded-2xl">
+              <div className="lg:col-span-3 relative my-4 overflow-hidden rounded-2xl">
                 <div className="absolute inset-0">
                   <img
                     src="https://images.unsplash.com/photo-1574943320219-5532a69ef5d8?w=1200&q=80"
                     alt=""
-                    className="h-full w-full object-cover opacity-15"
+                    className="h-full w-full object-cover opacity-35 animate-slow-drift"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/90 via-gray-950/70 to-gray-950/90" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/80 via-gray-950/40 to-gray-950/80" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-indigo-500/5" />
                 </div>
-                <div className="relative z-10 px-6 py-4 flex items-center gap-3">
-                  <div className="h-8 w-1 rounded-full bg-purple-500" />
+                <div className="relative z-10 px-6 py-6 flex items-center gap-4">
+                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-purple-400 to-indigo-500" />
                   <div>
-                    <h3 className="text-sm font-semibold text-white uppercase tracking-wider">
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       {lang === "sw" ? "Uchambuzi na Utabiri" : "Analysis & Prediction"}
                     </h3>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-400 mt-0.5">
                       {lang === "sw" ? "Utabiri wa bei na mapendekezo" : "Price trends, predictions & recommendations"}
                     </p>
                   </div>
@@ -1037,7 +1074,7 @@ export default function Dashboard() {
               {/*  PRICE ANALYSIS & PREDICTION (full width)                */}
               {/* ======================================================== */}
               {analysisData && (
-                <div className="rounded-2xl border border-purple-500/20 bg-purple-500/5 p-6 shadow-2xl shadow-purple-500/5 backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-purple-500/30">
+                <div className="rounded-2xl border border-purple-500/25 bg-purple-500/8 p-6 shadow-2xl shadow-purple-500/8 ring-1 ring-purple-500/[0.06] inset backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-purple-500/35 hover:bg-purple-500/10 hover:shadow-purple-500/15">
                   <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <h2 className="flex items-center gap-2 text-base font-semibold text-purple-300">
                       <BarChart3 className="h-5 w-5 text-purple-400" />
@@ -1053,25 +1090,25 @@ export default function Dashboard() {
 
                   {/* Stats row */}
                   <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-emerald-500/10 to-transparent p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("avgRetail", lang)}</p>
                       <p className="text-lg font-bold text-emerald-400">
                         KES {analysisData.statistics.avg_retail.toLocaleString()}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-blue-500/10 to-transparent p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("avgWholesale", lang)}</p>
                       <p className="text-lg font-bold text-blue-400">
                         KES {analysisData.statistics.avg_wholesale.toLocaleString()}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-amber-500/10 to-transparent p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("priceSpread", lang)}</p>
                       <p className="text-lg font-bold text-amber-400">
                         KES {analysisData.statistics.price_spread.toLocaleString()}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-white/5 bg-white/5 p-3 text-center">
+                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-purple-500/10 to-transparent p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("volatility", lang)}</p>
                       <p className={`text-lg font-bold ${
                         analysisData.statistics.volatility_cv_pct > 30
@@ -1088,7 +1125,8 @@ export default function Dashboard() {
                   {/* Recommendation cards */}
                   <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {analysisData.recommendation.best_sell_market && (
-                      <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+                      <div className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/12 to-emerald-500/3 p-4 ring-1 ring-emerald-500/[0.06] inset">
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-teal-400" />
                         <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-emerald-500">
                           <TrendingUp className="h-3.5 w-3.5" />
                           {t("bestSellMarket", lang)}
@@ -1102,7 +1140,8 @@ export default function Dashboard() {
                       </div>
                     )}
                     {analysisData.recommendation.cheapest_buy_market && (
-                      <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+                      <div className="relative overflow-hidden rounded-xl border border-blue-500/25 bg-gradient-to-br from-blue-500/12 to-blue-500/3 p-4 ring-1 ring-blue-500/[0.06] inset">
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400" />
                         <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-blue-500">
                           <ArrowDownRight className="h-3.5 w-3.5" />
                           {t("cheapestBuy", lang)}
@@ -1161,7 +1200,7 @@ export default function Dashboard() {
               {/* ======================================================== */}
               {/*  ADVISORY (full width)                                    */}
               {/* ======================================================== */}
-              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-6 shadow-2xl shadow-emerald-500/5 backdrop-blur-xl lg:col-span-3">
+              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-6 shadow-2xl shadow-emerald-500/8 ring-1 ring-emerald-500/[0.06] inset backdrop-blur-xl lg:col-span-3">
                 <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-emerald-400">
                   <Sprout className="h-5 w-5" />
                   {t("smartAdvisory", lang)}
@@ -1174,24 +1213,34 @@ export default function Dashboard() {
           )}
         </main>
 
-        {/* ============================================================== */}
-        {/*  FOOTER                                                         */}
-        {/* ============================================================== */}
-        <footer className="border-t border-white/5 mt-8">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Leaf className="h-4 w-4 text-emerald-500" />
-                <span className="text-sm font-semibold text-gray-400">AgriQuant Kenya</span>
-              </div>
-              <p className="text-center text-xs text-gray-600">
-                {t("footerCredits", lang)}
-              </p>
-              <div className="flex items-center gap-3 text-xs text-gray-600">
-                <span className="flex items-center gap-1">
-                  <Database className="h-3 w-3" />
-                  KAMIS + Mkulima Online
-                </span>
+        {/* Footer */}
+        <footer className="relative mt-8 overflow-hidden">
+          <div className="absolute inset-0 z-0">
+            <img
+              src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=1200&q=60"
+              alt=""
+              className="h-full w-full object-cover opacity-20"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/90 to-gray-950/70" />
+          </div>
+          <div className="relative z-10 border-t border-white/5">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
+                    <Leaf className="h-4 w-4 text-emerald-400" />
+                  </div>
+                  <span className="text-sm font-bold text-gray-300">AgriQuant Kenya</span>
+                </div>
+                <p className="text-center text-xs text-gray-500">
+                  {t("footerCredits", lang)}
+                </p>
+                <div className="flex items-center gap-3 text-xs text-gray-500">
+                  <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/5">
+                    <Database className="h-3 w-3" />
+                    KAMIS + Mkulima Online
+                  </span>
+                </div>
               </div>
             </div>
           </div>
