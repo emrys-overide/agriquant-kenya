@@ -98,6 +98,22 @@ def _sanitize_market_entries(entries, crop, kg_per_unit):
 
 # ── Helpers ────────────────────────────────────────────────────────
 
+SCRAPE_TIMEOUT_MS = 10000  # 10 second timeout for all scraping requests
+
+
+async def fetch_with_timeout(url, init_dict=None, timeout_ms=SCRAPE_TIMEOUT_MS):
+    """Fetch with an asyncio timeout to prevent hanging requests."""
+    import asyncio
+    try:
+        options = init_dict if init_dict else Object.fromEntries([])
+        resp = await asyncio.wait_for(fetch(url, options), timeout=timeout_ms / 1000)
+        return resp
+    except asyncio.TimeoutError:
+        return None
+    except Exception:
+        return None
+
+
 def json_response(data, status=200):
     """Build a JSON Response with proper CORS headers."""
     # Create Headers object empty, then set each header individually
@@ -134,11 +150,11 @@ async def scrape_kamis_prices(kamis_id):
     ua = random.choice(USER_AGENTS)
 
     try:
-        resp = await fetch(url, Object.fromEntries([
+        resp = await fetch_with_timeout(url, Object.fromEntries([
             ["headers", Object.fromEntries([["User-Agent", ua]])],
             ["redirect", "follow"],
         ]))
-        if resp.status != 200:
+        if resp is None or resp.status != 200:
             return None
         html = await resp.text()
     except Exception:
@@ -226,11 +242,11 @@ async def scrape_kamis_per_market(kamis_id):
     ua = random.choice(USER_AGENTS)
 
     try:
-        resp = await fetch(url, Object.fromEntries([
+        resp = await fetch_with_timeout(url, Object.fromEntries([
             ["headers", Object.fromEntries([["User-Agent", ua]])],
             ["redirect", "follow"],
         ]))
-        if resp.status != 200:
+        if resp is None or resp.status != 200:
             return None
         html = await resp.text()
     except Exception:
@@ -306,11 +322,11 @@ async def scrape_mkulima_online(soko_name):
     ua = random.choice(USER_AGENTS)
 
     try:
-        resp = await fetch(url, Object.fromEntries([
+        resp = await fetch_with_timeout(url, Object.fromEntries([
             ["headers", Object.fromEntries([["User-Agent", ua], ["Accept", "application/json"]])],
             ["redirect", "follow"],
         ]))
-        if resp.status != 200:
+        if resp is None or resp.status != 200:
             return None
         data = json.loads(await resp.text())
     except Exception:

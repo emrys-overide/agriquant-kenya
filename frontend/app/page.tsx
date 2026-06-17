@@ -372,8 +372,8 @@ export default function Dashboard() {
         const [weatherRes, pricesRes, marketsRes, analysisRes] = await Promise.all([
           axios.get<WeatherData>(`${API_URL}/weather/${location}`),
           axios.get<PriceData>(`${API_URL}/prices/${crop}`),
-          axios.get<MarketComparisonData>(`${API_URL}/prices/${crop}/markets`).catch(() => null),
-          axios.get<AnalysisData>(analysisUrl).catch(() => null),
+          axios.get<MarketComparisonData>(`${API_URL}/prices/${crop}/markets`, { timeout: 15000 }).catch(() => null),
+          axios.get<AnalysisData>(analysisUrl, { timeout: 15000 }).catch(() => null),
         ]);
 
         const adviceRes = await axios.post<AdviceData>(`${API_URL}/advice`, {
