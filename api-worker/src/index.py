@@ -381,6 +381,28 @@ async def on_fetch(request, env):
     if request.method == "OPTIONS":
         return cors_preflight()
 
+    # ── Root redirect ─────────────────────────────────────────────────
+    if path == "" or path == "/":
+        h = Headers.new()
+        h.set("Location", "https://agriquant-kenya.pages.dev")
+        return Response.new(None, status=302, headers=h)
+
+    # ── API info ──────────────────────────────────────────────────────
+    if path == "/api" and request.method == "GET":
+        return json_response({
+            "service": "AgriQuant Kenya API",
+            "version": "1.0",
+            "endpoints": {
+                "weather": "GET /api/weather/<location>",
+                "prices": "GET /api/prices/<crop>",
+                "markets": "GET /api/prices/<crop>/markets",
+                "analysis": "GET /api/analysis/<crop>",
+                "advice": "POST /api/advice",
+                "chat": "POST /api/chat",
+            },
+            "frontend": "https://agriquant-kenya.pages.dev",
+        })
+
     # ── GET /api/weather/<location> ────────────────────────────────
     m = re.match(r"^/api/weather/(.+)$", path)
     if m and request.method == "GET":

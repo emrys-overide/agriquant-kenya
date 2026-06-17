@@ -144,6 +144,31 @@ def _save_price_cache(data: dict):
 
 
 # ==========================================
+# 0. ROOT & API INFO
+# ==========================================
+from fastapi.responses import RedirectResponse, JSONResponse
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="https://agriquant-kenya.pages.dev")
+
+@app.get("/api")
+async def api_info():
+    return JSONResponse({
+        "service": "AgriQuant Kenya API",
+        "version": "1.0",
+        "endpoints": {
+            "weather": "GET /api/weather/<location>",
+            "prices": "GET /api/prices/<crop>",
+            "markets": "GET /api/prices/<crop>/markets",
+            "analysis": "GET /api/analysis/<crop>",
+            "advice": "POST /api/advice",
+            "chat": "POST /api/chat",
+        },
+        "frontend": "https://agriquant-kenya.pages.dev",
+    })
+
+# ==========================================
 # 1. LIVE WEATHER DATA (Using your API Key)
 # ==========================================
 @app.get("/api/weather/{location}")
