@@ -156,7 +156,7 @@ async def root():
 async def api_info():
     return JSONResponse({
         "service": "AgriQuant Kenya API",
-        "version": "1.0",
+        "version": "1.1",
         "endpoints": {
             "weather": "GET /api/weather/<location>",
             "prices": "GET /api/prices/<crop>",
@@ -165,6 +165,11 @@ async def api_info():
             "advice": "POST /api/advice",
             "chat": "POST /api/chat",
         },
+        "data_sources": [
+            "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
+            "Mkulima Online (soko.mkulimaonline.org) — Farmer marketplace JSON API",
+            "Mkulima Bora (portal.mkulimabora.org) — Digital agriculture marketplace with daily market prices",
+        ],
         "frontend": "https://agriquant-kenya.pages.dev",
     })
 
@@ -475,6 +480,114 @@ def _safe_float(val) -> float | None:
         return None
 
 
+# ==========================================
+# SOURCE 3: MKULIMA BORA (portal.mkulimabora.org)
+# ==========================================
+# Mkulima Bora is a digital agriculture marketplace and data platform that
+# aggregates real-time crop prices from major markets across Kenya.
+# The platform is associated with the broader Kenyan farming ecosystem
+# including community programmes like Mugambo wa Murimi (Inooro FM/TV),
+# which broadcasts farming content and connects farmers to market information.
+# Data is updated daily from market surveys and published as wholesale/retail
+# prices per kilogram at specific market locations.
+
+MKULIMA_BORA_BASE = "https://portal.mkulimabora.org/market-prices"
+MKULIMA_BORA_SLUGS: dict[str, str] = {
+    "maize": "dry-maize",
+    "tomatoes": "tomatoes",
+    "cabbages": "cabbages",
+    "onions": "dry-onions",
+    "french_beans": "french-beans",
+    "potatoes": "red-irish-potato",
+    "wheat": "wheat",
+}
+
+
+async def scrape_mkulima_bora(crop_slug: str) -> list[dict] | None:
+    """
+    Scrape per-market price data from Mkulima Bora (portal.mkulimabora.org).
+    Parses the HTML table at /market-prices/{crop_slug} and returns a list of
+    dicts: {market, county, wholesale_per_kg, retail_per_kg, date}.
+    Returns None on failure or if no valid data is found.
+    """
+    url = f"{MKULIMA_BORA_BASE}/{crop_slug}"
+    headers = {"User-Agent": random.choice(USER_AGENTS)}
+
+    async with httpx.AsyncClient(follow_redirects=True, verify=False) as client:
+        try:
+            response = await client.get(url, headers=headers, timeout=12.0)
+            if response.status_code != 200:
+                print(f"Mkulima Bora returned status {response.status_code} for {crop_slug}")
+                return None
+
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            # The site renders prices in a <table class="table-modern table">
+            table = soup.find("table", class_="table-modern")
+            if not table:
+                # Fallback: look for any table inside the premium wrapper
+                wrapper = soup.find("div", class_="table-wrap-premium")
+                if wrapper:
+                    table = wrapper.find("table")
+            if not table:
+                print(f"Mkulima Bora: no price table found for {crop_slug}")
+                return None
+
+            rows = table.find_all("tr")
+            entries: list[dict] = []
+
+            for row in rows[1:]:  # skip header
+                cells = row.find_all("td")
+                if len(cells) < 5:
+                    continue
+
+                market = cells[0].get_text(strip=True)
+                county = cells[1].get_text(strip=True) if len(cells) > 1 else ""
+
+                # Wholesale and retail are in <span class="price-pill ..."> elements
+                ws_text = ""
+                rt_text = ""
+                if len(cells) > 2:
+                    ws_span = cells[2].find("span", class_="price-pill")
+                    ws_text = ws_span.get_text(strip=True) if ws_span else cells[2].get_text(strip=True)
+                if len(cells) > 3:
+                    rt_span = cells[3].find("span", class_="price-pill")
+                    rt_text = rt_span.get_text(strip=True) if rt_span else cells[3].get_text(strip=True)
+
+                date_str = cells[5].get_text(strip=True) if len(cells) > 5 else ""
+
+                # Parse prices — strip "Ksh" prefix and commas
+                def _parse_price(text: str) -> float | None:
+                    cleaned = re.sub(r"[^\d.]", "", text.replace(",", ""))
+                    if not cleaned:
+                        return None
+                    try:
+                        val = float(cleaned)
+                        return val if 0.1 < val < 500000 else None
+                    except ValueError:
+                        return None
+
+                ws = _parse_price(ws_text)
+                rt = _parse_price(rt_text)
+
+                if not market or (ws is None and rt is None):
+                    continue
+
+                entries.append({
+                    "market": market,
+                    "county": county if county != "—" else "",
+                    "wholesale_per_kg": ws,
+                    "retail_per_kg": rt,
+                    "date": date_str,
+                })
+
+            return entries if entries else None
+
+        except Exception as e:
+            print(f"Mkulima Bora scraper error for {crop_slug}: {e}")
+            return None
+
+
 @app.get("/api/prices/{crop}")
 async def get_market_prices(crop: str):
     crop = crop.lower()
@@ -522,20 +635,52 @@ async def get_market_prices(crop: str):
         data_date = kamis_data["latest_date"] or "today"
         data_status = f"Live from KAMIS ({source_count} markets, {data_date})"
     else:
-        # Fallback: realistic baseline averages for Kenya
-        baselines_per_kg = {
-            "maize": 50, "tomatoes": 100, "cabbages": 27,
-            "onions": 80, "french_beans": 120, "potatoes": 70, "wheat": 100,
-        }
-        base = baselines_per_kg.get(crop, 50)
-        farm_gate_per_kg = base * 0.85
-        wholesale_per_kg = base
-        retail_per_kg = base * 1.50
+        # --- Secondary source: Mkulima Bora ---
+        bora_slug = MKULIMA_BORA_SLUGS.get(crop)
+        bora_entries = await scrape_mkulima_bora(bora_slug) if bora_slug else None
 
-        farm_price = round(farm_gate_per_kg * kg_per_unit, 2)
-        wholesale_price = round(wholesale_per_kg * kg_per_unit, 2)
-        retail_price = round(retail_per_kg * kg_per_unit, 2)
-        data_status = "Estimated baseline (KAMIS data unavailable for this crop)"
+        if bora_entries and len(bora_entries) >= 2:
+            ws_vals = sorted([e["wholesale_per_kg"] for e in bora_entries if e.get("wholesale_per_kg")])
+            rt_vals = sorted([e["retail_per_kg"] for e in bora_entries if e.get("retail_per_kg")])
+
+            def _median(vals):
+                if not vals:
+                    return None
+                return sorted(vals)[len(vals) // 2]
+
+            wholesale_per_kg = _median(ws_vals) if ws_vals else (_median(rt_vals) or 0) * 0.85
+            retail_per_kg = _median(rt_vals) or wholesale_per_kg * 1.35
+
+            # Farm gate: 80% of 25th-percentile wholesale
+            if len(ws_vals) >= 3:
+                p25 = ws_vals[len(ws_vals) // 4]
+            elif ws_vals:
+                p25 = ws_vals[0]
+            else:
+                p25 = wholesale_per_kg * 0.85
+            farm_gate_per_kg = p25 * 0.80
+
+            farm_price = round(farm_gate_per_kg * kg_per_unit, 2)
+            wholesale_price = round(wholesale_per_kg * kg_per_unit, 2)
+            retail_price = round(retail_per_kg * kg_per_unit, 2)
+
+            latest_date = max((e.get("date", "") for e in bora_entries if e.get("date")), default="recent")
+            data_status = f"Live from Mkulima Bora ({len(bora_entries)} markets, {latest_date})"
+        else:
+            # Last resort: hardcoded baselines
+            baselines_per_kg = {
+                "maize": 50, "tomatoes": 100, "cabbages": 27,
+                "onions": 80, "french_beans": 120, "potatoes": 70, "wheat": 100,
+            }
+            base = baselines_per_kg.get(crop, 50)
+            farm_gate_per_kg = base * 0.85
+            wholesale_per_kg = base
+            retail_per_kg = base * 1.50
+
+            farm_price = round(farm_gate_per_kg * kg_per_unit, 2)
+            wholesale_price = round(wholesale_per_kg * kg_per_unit, 2)
+            retail_price = round(retail_per_kg * kg_per_unit, 2)
+            data_status = "Estimated baseline (KAMIS & Mkulima Bora unavailable)"
 
     margin = round(((retail_price - farm_price) / farm_price) * 100, 2) if farm_price else 0
 
@@ -563,7 +708,7 @@ async def get_market_prices_by_market(crop: str):
     """
     Returns per-market wholesale & retail prices for a given crop
     in the crop's default unit (crate, bag, head, etc.).
-    Fetches from KAMIS + Mkulima Online concurrently and merges results.
+    Fetches from KAMIS + Mkulima Online + Mkulima Bora concurrently and merges results.
     Falls back to cached prices or hardcoded baselines when live data is unavailable.
     """
     crop = crop.lower()
@@ -575,11 +720,13 @@ async def get_market_prices_by_market(crop: str):
     soko_name = crop_info.get("soko_name", "")
     kg_per_unit = crop_info["kg_per_unit"]
     unit_name = crop_info["unit"]
+    bora_slug = MKULIMA_BORA_SLUGS.get(crop)
 
-    # --- Fetch from both sources concurrently ---
-    kamis_raw, soko_raw = await asyncio.gather(
+    # --- Fetch from all three sources concurrently ---
+    kamis_raw, soko_raw, bora_raw = await asyncio.gather(
         scrape_kamis_per_market(kamis_id) if kamis_id is not None else _async_none(),
         scrape_mkulima_online(soko_name) if soko_name else _async_none(),
+        scrape_mkulima_bora(bora_slug) if bora_slug else _async_none(),
     )
 
     sources_used = []
@@ -601,6 +748,9 @@ async def get_market_prices_by_market(crop: str):
     if soko_raw:
         _merge_entries(soko_raw, "Mkulima Online")
         sources_used.append("Mkulima Online")
+    if bora_raw:
+        _merge_entries(bora_raw, "Mkulima Bora")
+        sources_used.append("Mkulima Bora")
 
     # --- Sanitize: filter out unreasonable prices & outliers ---
     for key in list(all_entries.keys()):
@@ -725,11 +875,13 @@ async def get_price_analysis(crop: str, user_lat: float = None, user_lon: float 
     soko_name = crop_info.get("soko_name", "")
     kg_per_unit = crop_info["kg_per_unit"]
     unit_name = crop_info["unit"]
+    bora_slug = MKULIMA_BORA_SLUGS.get(crop)
 
-    # --- Fetch from both sources concurrently ---
-    kamis_raw, soko_raw = await asyncio.gather(
+    # --- Fetch from all three sources concurrently ---
+    kamis_raw, soko_raw, bora_raw = await asyncio.gather(
         scrape_kamis_per_market(kamis_id) if kamis_id is not None else _async_none(),
         scrape_mkulima_online(soko_name) if soko_name else _async_none(),
+        scrape_mkulima_bora(bora_slug) if bora_slug else _async_none(),
     )
 
     sources_used = []
@@ -744,6 +896,11 @@ async def get_price_analysis(crop: str, user_lat: float = None, user_lon: float 
         for e in soko_raw:
             raw_markets.append({**e, "_source": "Mkulima Online"})
         sources_used.append("Mkulima Online")
+
+    if bora_raw:
+        for e in bora_raw:
+            raw_markets.append({**e, "_source": "Mkulima Bora"})
+        sources_used.append("Mkulima Bora")
 
     data_source = "live" if sources_used else "none"
 

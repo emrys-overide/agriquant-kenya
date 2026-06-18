@@ -311,6 +311,96 @@ def _safe_float(val):
         return None
 
 
+# ── Mkulima Bora scraper (portal.mkulimabora.org) ──────────────────
+# Mkulima Bora is a digital agriculture marketplace that aggregates
+# real-time crop prices from major markets across Kenya.
+# Associated with community programmes like Mugambo wa Murimi (Inooro FM/TV).
+
+MKULIMA_BORA_BASE = "https://portal.mkulimabora.org/market-prices"
+MKULIMA_BORA_SLUGS = {
+    "maize": "dry-maize",
+    "tomatoes": "tomatoes",
+    "cabbages": "cabbages",
+    "onions": "dry-onions",
+    "french_beans": "french-beans",
+    "potatoes": "red-irish-potato",
+    "wheat": "wheat",
+}
+
+
+async def scrape_mkulima_bora(crop_slug):
+    """
+    Scrape per-market price data from Mkulima Bora (portal.mkulimabora.org).
+    Uses regex to parse the HTML table. Returns list of dicts:
+    {market, county, wholesale_per_kg, retail_per_kg, date} or None.
+    """
+    url = MKULIMA_BORA_BASE + "/" + crop_slug
+    ua = random.choice(USER_AGENTS)
+
+    try:
+        resp = await fetch_with_timeout(url, Object.fromEntries([
+            ["headers", Object.fromEntries([["User-Agent", ua]])],
+            ["redirect", "follow"],
+        ]))
+        if resp is None or resp.status != 200:
+            return None
+
+        html = await resp.text()
+
+        # Find the table-modern table rows
+        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.DOTALL)
+        if not rows:
+            return None
+
+        entries = []
+        for row_html in rows[1:]:  # skip header row
+            cells = re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.DOTALL)
+            if len(cells) < 5:
+                continue
+
+            # Strip HTML tags to get plain text
+            def strip_tags(s):
+                return re.sub(r"<[^>]+>", "", s).strip()
+
+            market = strip_tags(cells[0])
+            county = strip_tags(cells[1]) if len(cells) > 1 else ""
+
+            # Parse prices from price-pill spans or cell text
+            def parse_price_html(cell_html):
+                # Try to find price inside span.price-pill first
+                pill_match = re.search(r"class=[\"'][^\"']*price-pill[^\"']*[\"'][^>]*>(.*?)</span>", cell_html, re.DOTALL)
+                text = pill_match.group(1) if pill_match else cell_html
+                text = strip_tags(text)
+                cleaned = re.sub(r"[^\d.]", "", text.replace(",", ""))
+                if not cleaned:
+                    return None
+                try:
+                    val = float(cleaned)
+                    return val if 0.1 < val < 500000 else None
+                except ValueError:
+                    return None
+
+            ws = parse_price_html(cells[2]) if len(cells) > 2 else None
+            rt = parse_price_html(cells[3]) if len(cells) > 3 else None
+            date_str = strip_tags(cells[5]) if len(cells) > 5 else ""
+
+            if not market or (ws is None and rt is None):
+                continue
+
+            entries.append({
+                "market": market,
+                "county": county if county != "\u2014" else "",
+                "wholesale_per_kg": ws,
+                "retail_per_kg": rt,
+                "date": date_str,
+            })
+
+        return entries if entries else None
+
+    except Exception as e:
+        return None
+
+
 async def scrape_mkulima_online(soko_name):
     """
     Fetches per-market price data from Mkulima Online for a given commodity.
@@ -407,7 +497,7 @@ async def on_fetch(request, env):
     if path == "/api" and request.method == "GET":
         return json_response({
             "service": "AgriQuant Kenya API",
-            "version": "1.0",
+            "version": "1.1",
             "endpoints": {
                 "weather": "GET /api/weather/<location>",
                 "prices": "GET /api/prices/<crop>",
@@ -416,6 +506,11 @@ async def on_fetch(request, env):
                 "advice": "POST /api/advice",
                 "chat": "POST /api/chat",
             },
+            "data_sources": [
+                "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
+                "Mkulima Online (soko.mkulimaonline.org) — Farmer marketplace JSON API",
+                "Mkulima Bora (portal.mkulimabora.org) — Digital agriculture marketplace with daily market prices",
+            ],
             "frontend": "https://agriquant-kenya.pages.dev",
         })
 
@@ -503,8 +598,10 @@ async def on_fetch(request, env):
             "wheat": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 93, "kitale": 88},
         }
 
-        # Fetch from both sources concurrently
+        # Fetch from all three sources concurrently
         import asyncio
+
+        bora_slug = MKULIMA_BORA_SLUGS.get(crop)
 
         async def _fetch_kamis():
             if kamis_id is not None:
@@ -516,7 +613,14 @@ async def on_fetch(request, env):
                 return await scrape_mkulima_online(soko_name)
             return None
 
-        kamis_raw, soko_raw = await asyncio.gather(_fetch_kamis(), _fetch_soko())
+        async def _fetch_bora():
+            if bora_slug:
+                return await scrape_mkulima_bora(bora_slug)
+            return None
+
+        kamis_raw, soko_raw, bora_raw = await asyncio.gather(
+            _fetch_kamis(), _fetch_soko(), _fetch_bora()
+        )
 
         sources_used = []
         all_entries = {}
@@ -536,6 +640,9 @@ async def on_fetch(request, env):
         if soko_raw:
             merge_entries(soko_raw, "Mkulima Online")
             sources_used.append("Mkulima Online")
+        if bora_raw:
+            merge_entries(bora_raw, "Mkulima Bora")
+            sources_used.append("Mkulima Bora")
 
         # --- Sanitize: filter out unreasonable prices & outliers ---
         for key in list(all_entries.keys()):
@@ -629,6 +736,8 @@ async def on_fetch(request, env):
         user_lat = float(query.get("user_lat", [None])[0]) if query.get("user_lat") else None
         user_lon = float(query.get("user_lon", [None])[0]) if query.get("user_lon") else None
 
+        bora_slug = MKULIMA_BORA_SLUGS.get(crop)
+
         async def _fetch_kamis_a():
             if kamis_id is not None:
                 return await scrape_kamis_per_market(kamis_id)
@@ -639,7 +748,14 @@ async def on_fetch(request, env):
                 return await scrape_mkulima_online(soko_name)
             return None
 
-        kamis_raw, soko_raw = await aio.gather(_fetch_kamis_a(), _fetch_soko_a())
+        async def _fetch_bora_a():
+            if bora_slug:
+                return await scrape_mkulima_bora(bora_slug)
+            return None
+
+        kamis_raw, soko_raw, bora_raw = await aio.gather(
+            _fetch_kamis_a(), _fetch_soko_a(), _fetch_bora_a()
+        )
 
         sources_used = []
         raw_markets = []
@@ -652,6 +768,10 @@ async def on_fetch(request, env):
             for e in soko_raw:
                 raw_markets.append({**e, "_source": "Mkulima Online"})
             sources_used.append("Mkulima Online")
+        if bora_raw:
+            for e in bora_raw:
+                raw_markets.append({**e, "_source": "Mkulima Bora"})
+            sources_used.append("Mkulima Bora")
 
         data_source = "live" if sources_used else "none"
 
@@ -876,18 +996,50 @@ async def on_fetch(request, env):
             dd = kamis_data["latest_date"] or "today"
             data_status = "Live from KAMIS (" + str(sc) + " markets, " + dd + ")"
         else:
-            baselines = {
-                "maize": 50, "tomatoes": 100, "cabbages": 27,
-                "onions": 80, "french_beans": 120, "potatoes": 70, "wheat": 100,
-            }
-            base = baselines.get(crop, 50)
-            fg_pk  = base * 0.85
-            ws_pk  = base
-            rt_pk  = base * 1.50
-            farm_price      = round(fg_pk * kg_per_unit, 2)
-            wholesale_price = round(ws_pk * kg_per_unit, 2)
-            retail_price    = round(rt_pk * kg_per_unit, 2)
-            data_status     = "Estimated baseline (KAMIS data unavailable for this crop)"
+            # --- Secondary source: Mkulima Bora ---
+            bora_slug = MKULIMA_BORA_SLUGS.get(crop)
+            bora_entries = await scrape_mkulima_bora(bora_slug) if bora_slug else None
+
+            if bora_entries and len(bora_entries) >= 2:
+                ws_vals = sorted([e["wholesale_per_kg"] for e in bora_entries if e.get("wholesale_per_kg")])
+                rt_vals = sorted([e["retail_per_kg"] for e in bora_entries if e.get("retail_per_kg")])
+
+                def _med(vals):
+                    if not vals:
+                        return None
+                    return vals[len(vals) // 2]
+
+                wholesale_per_kg = _med(ws_vals) if ws_vals else (_med(rt_vals) or 0) * 0.85
+                retail_per_kg = _med(rt_vals) or wholesale_per_kg * 1.35
+
+                if len(ws_vals) >= 3:
+                    p25 = ws_vals[len(ws_vals) // 4]
+                elif ws_vals:
+                    p25 = ws_vals[0]
+                else:
+                    p25 = wholesale_per_kg * 0.85
+                farm_gate_per_kg = p25 * 0.80
+
+                farm_price      = round(farm_gate_per_kg * kg_per_unit, 2)
+                wholesale_price = round(wholesale_per_kg * kg_per_unit, 2)
+                retail_price    = round(retail_per_kg * kg_per_unit, 2)
+
+                latest_date = max((e.get("date", "") for e in bora_entries if e.get("date")), default="recent")
+                data_status = "Live from Mkulima Bora (" + str(len(bora_entries)) + " markets, " + latest_date + ")"
+            else:
+                # Last resort: hardcoded baselines
+                baselines = {
+                    "maize": 50, "tomatoes": 100, "cabbages": 27,
+                    "onions": 80, "french_beans": 120, "potatoes": 70, "wheat": 100,
+                }
+                base = baselines.get(crop, 50)
+                fg_pk  = base * 0.85
+                ws_pk  = base
+                rt_pk  = base * 1.50
+                farm_price      = round(fg_pk * kg_per_unit, 2)
+                wholesale_price = round(ws_pk * kg_per_unit, 2)
+                retail_price    = round(rt_pk * kg_per_unit, 2)
+                data_status     = "Estimated baseline (KAMIS & Mkulima Bora unavailable)"
 
         margin = (
             round(((retail_price - farm_price) / farm_price) * 100, 2)
