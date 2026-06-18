@@ -595,7 +595,7 @@ export default function Dashboard() {
             </div>
             <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-5 tracking-tight leading-tight">
               Smart Farming,{" "}
-              <span className="bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
                 Smarter Decisions
               </span>
             </h2>
@@ -794,11 +794,17 @@ export default function Dashboard() {
                   <div className="h-48 sm:h-56 md:h-64">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={priceChartData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} />
-                        <YAxis stroke="#9CA3AF" fontSize={12} />
+                        <defs>
+                          <linearGradient id="priceBarGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#F97316" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#EA580C" stopOpacity={0.85} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                        <YAxis stroke="#64748b" fontSize={12} />
                         <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                        <Bar dataKey="price" fill="#10B981" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="price" fill="url(#priceBarGrad)" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -815,22 +821,22 @@ export default function Dashboard() {
                       <LineChart data={weather?.forecast ?? []}>
                         <defs>
                           <linearGradient id="maxGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#F59E0B" stopOpacity={0.3} />
-                            <stop offset="100%" stopColor="#F59E0B" stopOpacity={0} />
+                            <stop offset="0%" stopColor="#FB923C" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="#FB923C" stopOpacity={0} />
                           </linearGradient>
                           <linearGradient id="minGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.3} />
-                            <stop offset="100%" stopColor="#3B82F6" stopOpacity={0} />
+                            <stop offset="0%" stopColor="#60A5FA" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="#60A5FA" stopOpacity={0} />
                           </linearGradient>
                           <linearGradient id="rainGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#06B6D4" stopOpacity={0.3} />
-                            <stop offset="100%" stopColor="#06B6D4" stopOpacity={0} />
+                            <stop offset="0%" stopColor="#22D3EE" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="#22D3EE" stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis dataKey="date" fontSize={11} stroke="#9CA3AF" />
-                        <YAxis yAxisId="left" stroke="#9CA3AF" fontSize={11} />
-                        <YAxis yAxisId="right" orientation="right" stroke="#9CA3AF" fontSize={11} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="date" fontSize={11} stroke="#64748b" />
+                        <YAxis yAxisId="left" stroke="#64748b" fontSize={11} />
+                        <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={11} />
                         <Tooltip content={<DarkTooltip />} />
                         <Area yAxisId="left" type="monotone" dataKey="max" stroke="transparent" fill="url(#maxGrad)" />
                         <Area yAxisId="left" type="monotone" dataKey="min" stroke="transparent" fill="url(#minGrad)" />
@@ -839,8 +845,8 @@ export default function Dashboard() {
                           yAxisId="left"
                           type="monotone"
                           dataKey="max"
-                          stroke="#F59E0B"
-                          strokeWidth={2}
+                          stroke="#FB923C"
+                          strokeWidth={2.5}
                           dot={false}
                           name={t("maxTemp", lang) + " (\u00B0C)"}
                         />
@@ -848,8 +854,8 @@ export default function Dashboard() {
                           yAxisId="left"
                           type="monotone"
                           dataKey="min"
-                          stroke="#3B82F6"
-                          strokeWidth={2}
+                          stroke="#60A5FA"
+                          strokeWidth={2.5}
                           dot={false}
                           name={t("minTemp", lang) + " (\u00B0C)"}
                         />
@@ -857,8 +863,8 @@ export default function Dashboard() {
                           yAxisId="right"
                           type="monotone"
                           dataKey="rain_mm"
-                          stroke="#06B6D4"
-                          strokeWidth={2}
+                          stroke="#22D3EE"
+                          strokeWidth={2.5}
                           dot={false}
                           name={t("rain", lang) + " (mm)"}
                         />
@@ -869,13 +875,13 @@ export default function Dashboard() {
                   {/* Legend */}
                   <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-amber-500" /> {t("maxTemp", lang)}
+                      <span className="h-2 w-4 rounded-sm bg-orange-400" /> {t("maxTemp", lang)}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-blue-500" /> {t("minTemp", lang)}
+                      <span className="h-2 w-4 rounded-sm bg-blue-400" /> {t("minTemp", lang)}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-cyan-500" /> {t("rain", lang)}
+                      <span className="h-2 w-4 rounded-sm bg-cyan-400" /> {t("rain", lang)}
                     </span>
                   </div>
                 </div>
@@ -890,10 +896,10 @@ export default function Dashboard() {
                     className="h-full w-full object-cover opacity-35 animate-slow-drift"
                   />
                   <div className="absolute inset-0 bg-gradient-to-r from-gray-950/80 via-gray-950/40 to-gray-950/80" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 via-transparent to-amber-500/5" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 via-transparent to-rose-500/5" />
                 </div>
                 <div className="relative z-10 px-6 py-6 flex items-center gap-4">
-                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-orange-400 to-amber-500" />
+                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-orange-400 to-rose-500" />
                   <div>
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       {lang === "sw" ? "Ulinganisho wa Masoko" : "Market Intelligence"}
@@ -941,58 +947,71 @@ export default function Dashboard() {
                   </div>
 
                   {/* Market comparison bar chart */}
-                  <div className="h-48 sm:h-56 md:h-72 mb-4">
+                  {(() => {
+                    const hasKeyMarkets = marketData.markets.some((m) => m.is_key_market);
+                    const displayMarkets = (showAllMarkets || !hasKeyMarkets)
+                      ? marketData.markets
+                      : marketData.markets.filter((m) => m.is_key_market);
+                    const chartData = displayMarkets
+                      .filter((m) => m.retail_price !== null || m.wholesale_price !== null)
+                      .slice(0, 12)
+                      .map((m) => ({
+                        name: m.market,
+                        Wholesale: m.wholesale_price ?? 0,
+                        Retail: m.retail_price ?? 0,
+                      }));
+
+                    return (
+                  <>
+                  {chartData.length > 0 && (
+                  <div className="h-52 sm:h-60 md:h-72 mb-4">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={(showAllMarkets
-                          ? marketData.markets
-                          : marketData.markets.filter((m) => m.is_key_market)
-                        )
-                          .filter((m) => m.retail_price !== null)
-                          .slice(0, 12)
-                          .map((m) => ({
-                            name: m.market,
-                            Wholesale: m.wholesale_price ?? 0,
-                            Retail: m.retail_price ?? 0,
-                          }))}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                        <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} angle={-20} textAnchor="end" height={50} />
-                        <YAxis stroke="#9CA3AF" fontSize={11} />
+                      <BarChart data={chartData}>
+                        <defs>
+                          <linearGradient id="wholesaleGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#38BDF8" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#0EA5E9" stopOpacity={0.85} />
+                          </linearGradient>
+                          <linearGradient id="retailGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#A3E635" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#84CC16" stopOpacity={0.85} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={11} angle={-20} textAnchor="end" height={50} />
+                        <YAxis stroke="#64748b" fontSize={11} />
                         <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                        <Bar dataKey="Wholesale" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="Retail" fill="#10B981" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="Wholesale" fill="url(#wholesaleGrad)" radius={[6, 6, 0, 0]} />
+                        <Bar dataKey="Retail" fill="url(#retailGrad)" radius={[6, 6, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
+                  )}
 
                   {/* Legend for market comparison */}
                   <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-blue-500" /> {t("wholesale", lang)} (KES)
+                      <span className="h-2.5 w-5 rounded-sm bg-sky-400" /> {t("wholesale", lang)} (KES)
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-emerald-500" /> {t("retail", lang)} (KES)
+                      <span className="h-2.5 w-5 rounded-sm bg-lime-400" /> {t("retail", lang)} (KES)
                     </span>
                   </div>
 
-                  {/* Market table for key markets */}
+                  {/* Market table */}
                   <div className="mt-4 overflow-x-auto">
                     <table className="w-full text-xs sm:text-sm">
                       <thead>
                         <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-gray-500">
-                          <th className="pb-2 pr-4">{t("market", lang)}</th>
-                          <th className="pb-2 pr-4 text-right">{t("wholesale", lang)}</th>
-                          <th className="pb-2 pr-4 text-right">{t("retail", lang)}</th>
-                          <th className="pb-2 text-right">{t("trend", lang)}</th>
+                          <th className="pb-3 pr-4">{t("market", lang)}</th>
+                          <th className="pb-3 pr-4 text-right">{t("wholesale", lang)}</th>
+                          <th className="pb-3 pr-4 text-right">{t("retail", lang)}</th>
+                          <th className="pb-3 text-right">{t("trend", lang)}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/5">
-                        {(showAllMarkets
-                          ? marketData.markets
-                          : marketData.markets.filter((m) => m.is_key_market)
-                        )
-                          .filter((m) => m.retail_price !== null)
+                        {displayMarkets
+                          .filter((m) => m.retail_price !== null || m.wholesale_price !== null)
                           .slice(0, 10)
                           .map((m, idx) => {
                             const prediction = analysisData?.predictions?.find(
@@ -1012,10 +1031,10 @@ export default function Dashboard() {
                                     {m.market}
                                   </div>
                                 </td>
-                                <td className="py-2 pr-4 text-right text-blue-400">
+                                <td className="py-2 pr-4 text-right text-sky-400">
                                   KES {m.wholesale_price?.toLocaleString() ?? "—"}
                                 </td>
-                                <td className="py-2 pr-4 text-right text-emerald-400">
+                                <td className="py-2 pr-4 text-right text-lime-400">
                                   KES {m.retail_price?.toLocaleString() ?? "—"}
                                 </td>
                                 <td className="py-2 text-right">
@@ -1043,6 +1062,9 @@ export default function Dashboard() {
                       </tbody>
                     </table>
                   </div>
+                  </>
+                  );
+                  })()}
                 </div>
               )}
 
@@ -1055,10 +1077,10 @@ export default function Dashboard() {
                     className="h-full w-full object-cover opacity-35 animate-slow-drift"
                   />
                   <div className="absolute inset-0 bg-gradient-to-r from-gray-950/80 via-gray-950/40 to-gray-950/80" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 via-transparent to-indigo-500/5" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5" />
                 </div>
                 <div className="relative z-10 px-6 py-6 flex items-center gap-4">
-                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-purple-400 to-indigo-500" />
+                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-violet-400 to-fuchsia-500" />
                   <div>
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">
                       {lang === "sw" ? "Uchambuzi na Utabiri" : "Analysis & Prediction"}
@@ -1074,14 +1096,14 @@ export default function Dashboard() {
               {/*  PRICE ANALYSIS & PREDICTION (full width)                */}
               {/* ======================================================== */}
               {analysisData && (
-                <div className="rounded-2xl border border-purple-500/25 bg-purple-500/8 p-6 shadow-2xl shadow-purple-500/8 ring-1 ring-purple-500/[0.06] inset backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-purple-500/35 hover:bg-purple-500/10 hover:shadow-purple-500/15">
+                <div className="rounded-2xl border border-violet-500/25 bg-violet-500/8 p-6 shadow-2xl shadow-violet-500/8 ring-1 ring-violet-500/[0.06] inset backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-violet-500/35 hover:bg-violet-500/10 hover:shadow-violet-500/15">
                   <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="flex items-center gap-2 text-base font-semibold text-purple-300">
-                      <BarChart3 className="h-5 w-5 text-purple-400" />
+                    <h2 className="flex items-center gap-2 text-base font-semibold text-violet-300">
+                      <BarChart3 className="h-5 w-5 text-violet-400" />
                       {t("analysisPrediction", lang)}: {analysisData.crop}
                     </h2>
                     {analysisData.data_sources && analysisData.data_sources.length > 0 && (
-                      <span className="flex items-center gap-1.5 rounded-full bg-purple-500/10 px-2.5 py-1 text-xs font-medium text-purple-300">
+                      <span className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-300">
                         <Database className="h-3 w-3" />
                         {analysisData.data_sources.join(" + ")}
                       </span>
@@ -1108,7 +1130,7 @@ export default function Dashboard() {
                         KES {analysisData.statistics.price_spread.toLocaleString()}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-purple-500/10 to-transparent p-3 text-center">
+                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-violet-500/10 to-transparent p-3 text-center">
                       <p className="mb-1 text-xs text-gray-500">{t("volatility", lang)}</p>
                       <p className={`text-lg font-bold ${
                         analysisData.statistics.volatility_cv_pct > 30
@@ -1167,12 +1189,22 @@ export default function Dashboard() {
                             [t("predicted", lang)]: p.predicted_price,
                           }))}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                          <XAxis dataKey="name" stroke="#9CA3AF" fontSize={11} angle={-20} textAnchor="end" height={50} />
-                          <YAxis stroke="#9CA3AF" fontSize={11} />
+                          <defs>
+                            <linearGradient id="currentGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#A78BFA" stopOpacity={1} />
+                              <stop offset="100%" stopColor="#7C3AED" stopOpacity={0.85} />
+                            </linearGradient>
+                            <linearGradient id="predictedGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#F472B6" stopOpacity={1} />
+                              <stop offset="100%" stopColor="#EC4899" stopOpacity={0.85} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                          <XAxis dataKey="name" stroke="#64748b" fontSize={11} angle={-20} textAnchor="end" height={50} />
+                          <YAxis stroke="#64748b" fontSize={11} />
                           <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                          <Bar dataKey={t("current", lang)} fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey={t("predicted", lang)} fill="#C084FC" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey={t("current", lang)} fill="url(#currentGrad)" radius={[6, 6, 0, 0]} />
+                          <Bar dataKey={t("predicted", lang)} fill="url(#predictedGrad)" radius={[6, 6, 0, 0]} />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -1181,10 +1213,10 @@ export default function Dashboard() {
                   {/* Prediction legend */}
                   <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-violet-500" /> {t("current", lang)} (KES)
+                      <span className="h-2 w-4 rounded-sm bg-violet-400" /> {t("current", lang)} (KES)
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-purple-300" /> {t("predicted", lang)} (KES)
+                      <span className="h-2 w-4 rounded-sm bg-pink-400" /> {t("predicted", lang)} (KES)
                     </span>
                   </div>
 
