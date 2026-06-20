@@ -1,5 +1,5 @@
 """
-AgriQuant Kenya – Cloudflare Python Worker
+kilimo.hub@ke – Cloudflare Python Worker
 Ports all API endpoints from the FastAPI backend (main.py).
 Endpoints:
   GET  /api/weather/<location>
@@ -14,6 +14,7 @@ from js import Response, fetch, Headers, Object
 import json
 import re
 import random
+from datetime import datetime
 from urllib.parse import urlparse, parse_qs
 
 # ── Configuration ──────────────────────────────────────────────────
@@ -496,8 +497,8 @@ async def on_fetch(request, env):
     # ── API info ──────────────────────────────────────────────────────
     if path == "/api" and request.method == "GET":
         return json_response({
-            "service": "AgriQuant Kenya API",
-            "version": "1.1",
+            "service": "kilimo.hub@ke API",
+            "version": "1.2",
             "endpoints": {
                 "weather": "GET /api/weather/<location>",
                 "prices": "GET /api/prices/<crop>",
@@ -505,6 +506,8 @@ async def on_fetch(request, env):
                 "analysis": "GET /api/analysis/<crop>",
                 "advice": "POST /api/advice",
                 "chat": "POST /api/chat",
+                "submit_feedback": "POST /api/comments",
+                "get_feedback": "GET /api/comments?password=<admin_password>",
             },
             "data_sources": [
                 "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
@@ -1055,6 +1058,68 @@ async def on_fetch(request, env):
             "profit_margin_estimate": margin,
             "data_status": data_status,
         })
+
+    # ── POST /api/comments — Submit feedback ─────────────────────────
+    if path == "/api/comments" and request.method == "POST":
+        try:
+            body = json.loads(await request.text())
+        except Exception:
+            return json_response({"error": "Invalid JSON"}, status=400)
+
+        name = (body.get("name") or "").strip()[:100]
+        email = (body.get("email") or "").strip()[:200]
+        message = (body.get("message") or "").strip()[:2000]
+        rating = body.get("rating", 0)
+
+        if not name or not message:
+            return json_response({"error": "Name and message are required."}, status=400)
+
+        if not isinstance(rating, (int, float)):
+            rating = 0
+        rating = max(0, min(5, int(rating)))
+
+        # Load existing comments from KV
+        try:
+            existing = await env.COMMENTS.get("all_comments")
+            comments = json.loads(existing) if existing else []
+        except Exception:
+            comments = []
+
+        import time
+        comment = {
+            "id": str(int(time.time() * 1000)) + "-" + str(random.randint(1000, 9999)),
+            "name": name,
+            "email": email,
+            "message": message,
+            "rating": rating,
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }
+
+        comments.insert(0, comment)  # newest first
+
+        # Store back to KV
+        try:
+            await env.COMMENTS.put("all_comments", json.dumps(comments))
+        except Exception as e:
+            return json_response({"error": "Could not save feedback: " + str(e)}, status=500)
+
+        return json_response({"success": True, "message": "Feedback submitted. Thank you!"})
+
+    # ── GET /api/comments — Admin: retrieve all feedback ─────────────
+    if path == "/api/comments" and request.method == "GET":
+        password = query.get("password", [""])[0]
+        admin_pw = env.ADMIN_PASSWORD if hasattr(env, "ADMIN_PASSWORD") else "agriquant2026"
+
+        if password != admin_pw:
+            return json_response({"authorized": False, "comments": []})
+
+        try:
+            existing = await env.COMMENTS.get("all_comments")
+            comments = json.loads(existing) if existing else []
+        except Exception:
+            comments = []
+
+        return json_response({"authorized": True, "comments": comments})
 
     # ── POST /api/advice ───────────────────────────────────────────
     if path == "/api/advice" and request.method == "POST":

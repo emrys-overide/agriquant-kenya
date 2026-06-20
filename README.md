@@ -1,4 +1,4 @@
-# AgriQuant Kenya
+# kilimo.hub@ke
 
 A full-stack agricultural intelligence dashboard for Kenyan farmers, providing live weather data, real-time market prices, AI-powered farming advice, and an interactive chatbot.
 

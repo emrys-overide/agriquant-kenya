@@ -155,8 +155,8 @@ async def root():
 @app.get("/api")
 async def api_info():
     return JSONResponse({
-        "service": "AgriQuant Kenya API",
-        "version": "1.1",
+        "service": "kilimo.hub@ke API",
+        "version": "1.2",
         "endpoints": {
             "weather": "GET /api/weather/<location>",
             "prices": "GET /api/prices/<crop>",
@@ -164,6 +164,8 @@ async def api_info():
             "analysis": "GET /api/analysis/<crop>",
             "advice": "POST /api/advice",
             "chat": "POST /api/chat",
+            "submit_feedback": "POST /api/comments",
+            "get_feedback": "GET /api/comments?password=<admin_password>",
         },
         "data_sources": [
             "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
@@ -1401,6 +1403,62 @@ async def gemini_chat(payload: dict):
         reply_text = "Sorry, I could not generate a response at this time. Please try again."
 
     return {"reply": reply_text}
+
+
+# ==========================================
+# 6. FEEDBACK / COMMENTS (Local JSON Storage)
+# ==========================================
+import uuid
+
+COMMENTS_FILE = os.path.join(os.path.dirname(__file__), "comments.json")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "agriquant2026")
+
+
+def _load_comments() -> list:
+    try:
+        with open(COMMENTS_FILE, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+
+def _save_comments(comments: list):
+    with open(COMMENTS_FILE, "w") as f:
+        json.dump(comments, f, indent=2)
+
+
+@app.post("/api/comments")
+async def submit_comment(data: dict):
+    """Submit feedback/comment from the dashboard."""
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip()
+    message = (data.get("message") or "").strip()
+    rating = data.get("rating", 0)
+
+    if not name or not message:
+        raise HTTPException(status_code=400, detail="Name and message are required.")
+
+    comments = _load_comments()
+    comment = {
+        "id": str(uuid.uuid4())[:8],
+        "name": name,
+        "email": email,
+        "message": message,
+        "rating": rating,
+        "timestamp": datetime.now().isoformat(),
+    }
+    comments.insert(0, comment)  # newest first
+    _save_comments(comments)
+    return {"success": True, "id": comment["id"]}
+
+
+@app.get("/api/comments")
+async def get_comments(password: str = ""):
+    """Retrieve all comments (admin only, password-protected)."""
+    if password != ADMIN_PASSWORD:
+        return {"authorized": False, "comments": []}
+    comments = _load_comments()
+    return {"authorized": True, "comments": comments}
 
 
 if __name__ == "__main__":

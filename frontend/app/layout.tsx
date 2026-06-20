@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AgriQuant Kenya - Smart Farming Dashboard",
+  title: "kilimo.hub@ke - Smart Farming Dashboard",
   description: "Live weather, market prices, and AI-powered farming advice for Kenyan farmers",
 };
 

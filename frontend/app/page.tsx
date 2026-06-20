@@ -9,8 +9,10 @@ import {
   Leaf,
   Loader2,
   MessageCircle,
+  MessageSquare,
   RefreshCw,
   Send,
+  Star,
   TrendingUp,
   X,
   Globe,
@@ -28,6 +30,9 @@ import {
   Database,
   ShoppingCart,
   Wheat,
+  Lock,
+  CheckCircle,
+  User,
 } from "lucide-react";
 import {
   Area,
@@ -299,6 +304,90 @@ export default function Dashboard() {
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
   const [showAllMarkets, setShowAllMarkets] = useState(false);
 
+  /* feedback form state */
+  const [fbName, setFbName] = useState("");
+  const [fbEmail, setFbEmail] = useState("");
+  const [fbMessage, setFbMessage] = useState("");
+  const [fbRating, setFbRating] = useState(0);
+  const [fbHoverRating, setFbHoverRating] = useState(0);
+  const [fbLoading, setFbLoading] = useState(false);
+  const [fbSent, setFbSent] = useState(false);
+  const [fbError, setFbError] = useState("");
+
+  /* admin panel state */
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminPass, setAdminPass] = useState("");
+  const [adminAuthed, setAdminAuthed] = useState(false);
+  const [adminComments, setAdminComments] = useState<Array<{id: string; name: string; email: string; message: string; rating: number; timestamp: string}>>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const logoClickCount = useRef(0);
+  const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /* Check URL for admin mode */
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("admin=true")) {
+      setAdminOpen(true);
+    }
+  }, []);
+
+  /* Logo click handler for admin access (5 rapid clicks) */
+  const handleLogoClick = () => {
+    logoClickCount.current += 1;
+    if (logoClickTimer.current) clearTimeout(logoClickTimer.current);
+    logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0; }, 2000);
+    if (logoClickCount.current >= 5) {
+      logoClickCount.current = 0;
+      setAdminOpen(true);
+    }
+  };
+
+  /* Submit feedback */
+  const submitFeedback = async () => {
+    if (!fbMessage.trim() || !fbName.trim()) return;
+    setFbLoading(true);
+    setFbError("");
+    try {
+      await axios.post(`${API_URL}/comments`, {
+        name: fbName.trim(),
+        email: fbEmail.trim(),
+        message: fbMessage.trim(),
+        rating: fbRating,
+      });
+      setFbSent(true);
+      setFbName("");
+      setFbEmail("");
+      setFbMessage("");
+      setFbRating(0);
+      setTimeout(() => setFbSent(false), 5000);
+    } catch {
+      setFbError("Could not submit feedback. Please try again.");
+    } finally {
+      setFbLoading(false);
+    }
+  };
+
+  /* Fetch admin comments */
+  const fetchComments = async () => {
+    if (!adminPass) return;
+    setAdminLoading(true);
+    try {
+      const res = await axios.get(`${API_URL}/comments`, {
+        params: { password: adminPass },
+      });
+      if (res.data?.authorized) {
+        setAdminAuthed(true);
+        setAdminComments(res.data.comments || []);
+      } else {
+        setAdminAuthed(false);
+        setAdminComments([]);
+      }
+    } catch {
+      setAdminAuthed(false);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
   /* --- derived data --- */
   const priceChartData = [
     { name: t("farmGate", lang), price: prices?.farm_gate_price_ksh ?? 0 },
@@ -490,11 +579,11 @@ export default function Dashboard() {
           <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:px-6 py-4 md:flex-row">
             {/* Logo + Live badge */}
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
+              <button onClick={handleLogoClick} className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 transition hover:bg-emerald-500/20 cursor-pointer">
                 <Leaf className="h-6 w-6 text-emerald-400" />
-              </div>
+              </button>
               <h1 className="text-xl font-bold tracking-tight text-white">
-                AgriQuant <span className="text-emerald-400">Kenya</span>
+                kilimo.hub<span className="text-emerald-400">@ke</span>
               </h1>
               <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400">
                 <span className="relative flex h-2 w-2">
@@ -1245,8 +1334,115 @@ export default function Dashboard() {
           )}
         </main>
 
+        {/* ================================================================ */}
+        {/*  FEEDBACK SECTION                                                 */}
+        {/* ================================================================ */}
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 z-0">
+            <img
+              src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1920&q=60"
+              alt=""
+              className="h-full w-full object-cover opacity-15"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/85 to-gray-950/95" />
+          </div>
+          <div className="relative z-10 mx-auto max-w-3xl px-4 sm:px-6 py-12">
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-1.5 mb-4">
+                <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
+                <span className="text-xs font-medium text-amber-300">
+                  {lang === "sw" ? "Maoni Yako" : "Your Feedback"}
+                </span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+                {lang === "sw" ? "Tusaidie Kuboresha" : "Help Us Improve"}
+              </h2>
+              <p className="text-sm text-gray-400 max-w-lg mx-auto">
+                {lang === "sw"
+                  ? "Tuma maoni, mapendekezo, au ripoti hitilafu. Sauti yako ni muhimu kwetu."
+                  : "Share your feedback, suggestions, or report issues. Your voice helps us build a better tool for Kenyan farmers."}
+              </p>
+            </div>
+
+            {fbSent ? (
+              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-8 text-center backdrop-blur-xl">
+                <CheckCircle className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
+                <h3 className="text-lg font-bold text-white mb-1">
+                  {lang === "sw" ? "Asante!" : "Thank You!"}
+                </h3>
+                <p className="text-sm text-gray-400">
+                  {lang === "sw" ? "Maoni yako yamepokelewa." : "Your feedback has been received."}
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 sm:p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
+                {/* Star rating */}
+                <div className="mb-5 text-center">
+                  <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">
+                    {lang === "sw" ? "Kiwango" : "Rating"}
+                  </p>
+                  <div className="flex items-center justify-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        onClick={() => setFbRating(star)}
+                        onMouseEnter={() => setFbHoverRating(star)}
+                        onMouseLeave={() => setFbHoverRating(0)}
+                        className="p-1 transition-transform hover:scale-110"
+                      >
+                        <Star
+                          className={`h-7 w-7 transition-colors ${
+                            star <= (fbHoverRating || fbRating)
+                              ? "text-amber-400 fill-amber-400"
+                              : "text-gray-600"
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                  <input
+                    type="text"
+                    value={fbName}
+                    onChange={(e) => setFbName(e.target.value)}
+                    placeholder={lang === "sw" ? "Jina lako *" : "Your Name *"}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
+                  />
+                  <input
+                    type="email"
+                    value={fbEmail}
+                    onChange={(e) => setFbEmail(e.target.value)}
+                    placeholder={lang === "sw" ? "Barua pepe (hiari)" : "Email (optional)"}
+                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
+                  />
+                </div>
+                <textarea
+                  value={fbMessage}
+                  onChange={(e) => setFbMessage(e.target.value)}
+                  placeholder={lang === "sw" ? "Andika maoni yako hapa... *" : "Write your feedback here... *"}
+                  rows={4}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 resize-none"
+                />
+                {fbError && <p className="mt-2 text-xs text-red-400">{fbError}</p>}
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={submitFeedback}
+                    disabled={fbLoading || !fbMessage.trim() || !fbName.trim()}
+                    className="flex items-center gap-2 rounded-xl bg-amber-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {fbLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                    {lang === "sw" ? "Tuma Maoni" : "Send Feedback"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Footer */}
-        <footer className="relative mt-8 overflow-hidden">
+        <footer className="relative mt-0 overflow-hidden">
           <div className="absolute inset-0 z-0">
             <img
               src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=1200&q=60"
@@ -1257,22 +1453,29 @@ export default function Dashboard() {
           </div>
           <div className="relative z-10 border-t border-white/5">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex flex-col items-center gap-6">
                 <div className="flex items-center gap-2.5">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
                     <Leaf className="h-4 w-4 text-emerald-400" />
                   </div>
-                  <span className="text-sm font-bold text-gray-300">AgriQuant Kenya</span>
+                  <span className="text-sm font-bold text-gray-300">kilimo.hub@ke</span>
                 </div>
                 <p className="text-center text-xs text-gray-500">
                   {t("footerCredits", lang)}
                 </p>
-                <div className="flex items-center gap-3 text-xs text-gray-500">
+                <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-500">
                   <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/5">
                     <Database className="h-3 w-3" />
-                    KAMIS + Mkulima Online
+                    KAMIS + Mkulima Bora + Mkulima Online
+                  </span>
+                  <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/5">
+                    <User className="h-3 w-3" />
+                    Created by Paul N Magima
                   </span>
                 </div>
+                <p className="text-center text-[10px] text-gray-600">
+                  &copy; {new Date().getFullYear()} kilimo.hub@ke. All rights reserved.
+                </p>
               </div>
             </div>
           </div>
@@ -1363,6 +1566,108 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================ */}
+      {/*  ADMIN PANEL                                                      */}
+      {/* ================================================================ */}
+      {adminOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAdminOpen(false)} />
+          <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-xl mx-4">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+              <div className="flex items-center gap-2">
+                <Lock className="h-4 w-4 text-amber-400" />
+                <h3 className="text-sm font-semibold text-white">Admin Panel — Feedback</h3>
+              </div>
+              <button
+                onClick={() => { setAdminOpen(false); setAdminAuthed(false); setAdminPass(""); }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-white/10 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Auth gate */}
+            {!adminAuthed ? (
+              <div className="p-6">
+                <p className="text-xs text-gray-500 mb-3">Enter the admin password to view feedback.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    value={adminPass}
+                    onChange={(e) => setAdminPass(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") fetchComments(); }}
+                    placeholder="Admin password"
+                    className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
+                  />
+                  <button
+                    onClick={fetchComments}
+                    disabled={adminLoading || !adminPass}
+                    className="rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
+                  >
+                    {adminLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Login"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Comments list */
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs text-gray-500">
+                    {adminComments.length} feedback {adminComments.length === 1 ? "entry" : "entries"} received
+                  </p>
+                  <button
+                    onClick={fetchComments}
+                    disabled={adminLoading}
+                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-gray-400 transition hover:bg-white/10"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${adminLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </button>
+                </div>
+                {adminComments.length === 0 ? (
+                  <div className="text-center py-12">
+                    <MessageSquare className="h-10 w-10 text-gray-700 mx-auto mb-3" />
+                    <p className="text-sm text-gray-500">No feedback submitted yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {adminComments.map((c) => (
+                      <div key={c.id} className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10">
+                              <User className="h-3.5 w-3.5 text-emerald-400" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">{c.name}</p>
+                              {c.email && <p className="text-[10px] text-gray-500">{c.email}</p>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {c.rating > 0 && (
+                              <div className="flex items-center gap-0.5">
+                                {[1, 2, 3, 4, 5].map((s) => (
+                                  <Star key={s} className={`h-3 w-3 ${s <= c.rating ? "text-amber-400 fill-amber-400" : "text-gray-700"}`} />
+                                ))}
+                              </div>
+                            )}
+                            <span className="text-[10px] text-gray-600">
+                              {new Date(c.timestamp).toLocaleDateString("en-KE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">{c.message}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
