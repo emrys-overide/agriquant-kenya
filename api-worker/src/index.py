@@ -25,8 +25,8 @@ CROP_MAPPING = {
     "maize":         {"unit": "90kg Bag",        "kamis_id": 1,    "kg_per_unit": 90,  "soko_name": "Dry Maize"},
     "tomatoes":      {"unit": "Crate (~30kg)",   "kamis_id": 61,   "kg_per_unit": 30,  "soko_name": "Tomatoes"},
     "cabbages":      {"unit": "Head (~1.5kg)",   "kamis_id": 58,   "kg_per_unit": 1.5, "soko_name": "Cabbages"},
-    "onions":        {"unit": "Kg",               "kamis_id": None, "kg_per_unit": 1,   "soko_name": "Dry Onions"},
-    "french_beans":  {"unit": "Kg",               "kamis_id": None, "kg_per_unit": 1,   "soko_name": "French beans"},
+    "onions":        {"unit": "Kg",               "kamis_id": 158,  "kg_per_unit": 1,   "soko_name": "Dry Onions"},
+    "french_beans":  {"unit": "Kg",               "kamis_id": 177,  "kg_per_unit": 1,   "soko_name": "French beans"},
     "potatoes":      {"unit": "50kg Bag",         "kamis_id": 57,   "kg_per_unit": 50,  "soko_name": "White Irish Potatoes"},
     "wheat":         {"unit": "90kg Bag",         "kamis_id": 3,    "kg_per_unit": 90,  "soko_name": "Wheat"},
 }
@@ -312,94 +312,26 @@ def _safe_float(val):
         return None
 
 
-# ── Mkulima Bora scraper (portal.mkulimabora.org) ──────────────────
-# Mkulima Bora is a digital agriculture marketplace that aggregates
-# real-time crop prices from major markets across Kenya.
-# Associated with community programmes like Mugambo wa Murimi (Inooro FM/TV).
+# ── Worker Caching Helper (KV + In-Memory Warm State) ──────────────
+_WORKER_CACHE = {}
 
-MKULIMA_BORA_BASE = "https://portal.mkulimabora.org/market-prices"
-MKULIMA_BORA_SLUGS = {
-    "maize": "dry-maize",
-    "tomatoes": "tomatoes",
-    "cabbages": "cabbages",
-    "onions": "dry-onions",
-    "french_beans": "french-beans",
-    "potatoes": "red-irish-potato",
-    "wheat": "wheat",
-}
-
-
-async def scrape_mkulima_bora(crop_slug):
-    """
-    Scrape per-market price data from Mkulima Bora (portal.mkulimabora.org).
-    Uses regex to parse the HTML table. Returns list of dicts:
-    {market, county, wholesale_per_kg, retail_per_kg, date} or None.
-    """
-    url = MKULIMA_BORA_BASE + "/" + crop_slug
-    ua = random.choice(USER_AGENTS)
-
+async def _get_cache(key, env):
     try:
-        resp = await fetch_with_timeout(url, Object.fromEntries([
-            ["headers", Object.fromEntries([["User-Agent", ua]])],
-            ["redirect", "follow"],
-        ]))
-        if resp is None or resp.status != 200:
-            return None
+        if hasattr(env, "PRICE_CACHE") and env.PRICE_CACHE:
+            val = await env.PRICE_CACHE.get(key)
+            if val:
+                return json.loads(val)
+    except Exception:
+        pass
+    return _WORKER_CACHE.get(key)
 
-        html = await resp.text()
-
-        # Find the table-modern table rows
-        rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.DOTALL)
-        if not rows:
-            return None
-
-        entries = []
-        for row_html in rows[1:]:  # skip header row
-            cells = re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.DOTALL)
-            if len(cells) < 5:
-                continue
-
-            # Strip HTML tags to get plain text
-            def strip_tags(s):
-                return re.sub(r"<[^>]+>", "", s).strip()
-
-            market = strip_tags(cells[0])
-            county = strip_tags(cells[1]) if len(cells) > 1 else ""
-
-            # Parse prices from price-pill spans or cell text
-            def parse_price_html(cell_html):
-                # Try to find price inside span.price-pill first
-                pill_match = re.search(r"class=[\"'][^\"']*price-pill[^\"']*[\"'][^>]*>(.*?)</span>", cell_html, re.DOTALL)
-                text = pill_match.group(1) if pill_match else cell_html
-                text = strip_tags(text)
-                cleaned = re.sub(r"[^\d.]", "", text.replace(",", ""))
-                if not cleaned:
-                    return None
-                try:
-                    val = float(cleaned)
-                    return val if 0.1 < val < 500000 else None
-                except ValueError:
-                    return None
-
-            ws = parse_price_html(cells[2]) if len(cells) > 2 else None
-            rt = parse_price_html(cells[3]) if len(cells) > 3 else None
-            date_str = strip_tags(cells[5]) if len(cells) > 5 else ""
-
-            if not market or (ws is None and rt is None):
-                continue
-
-            entries.append({
-                "market": market,
-                "county": county if county != "\u2014" else "",
-                "wholesale_per_kg": ws,
-                "retail_per_kg": rt,
-                "date": date_str,
-            })
-
-        return entries if entries else None
-
-    except Exception as e:
-        return None
+async def _set_cache(key, data, env, ttl=21600):
+    _WORKER_CACHE[key] = data
+    try:
+        if hasattr(env, "PRICE_CACHE") and env.PRICE_CACHE:
+            await env.PRICE_CACHE.put(key, json.dumps(data), expirationTtl=ttl)
+    except Exception:
+        pass
 
 
 async def scrape_mkulima_online(soko_name):
@@ -512,7 +444,7 @@ async def on_fetch(request, env):
             "data_sources": [
                 "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
                 "Mkulima Online (soko.mkulimaonline.org) — Farmer marketplace JSON API",
-                "Mkulima Bora (portal.mkulimabora.org) — Digital agriculture marketplace with daily market prices",
+                "Open-Meteo (open-meteo.com) — Live satellite & ECMWF agro-telemetry (volumetric soil moisture & soil temperature)",
             ],
             "frontend": "https://agriquant-kenya.pages.dev",
         })
@@ -545,8 +477,56 @@ async def on_fetch(request, env):
 
         current  = data["current"]
         forecast = data["forecast"]["forecastday"]
+        loc_data = data.get("location", {})
+        lat = loc_data.get("lat")
+        lon = loc_data.get("lon")
+
+        # Real Soil Telemetry via Open-Meteo Agro API
+        soil_moisture_pct = None
+        soil_moisture_volumetric = None
+        soil_temp_c = None
+        soil_status = "Optimal"
+
+        if lat is not None and lon is not None:
+            try:
+                om_url = (
+                    "https://api.open-meteo.com/v1/forecast"
+                    "?latitude=" + str(lat) + "&longitude=" + str(lon) +
+                    "&current=soil_temperature_0cm,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm"
+                    "&timezone=Africa/Nairobi"
+                )
+                om_resp = await fetch_with_timeout(om_url, timeout_ms=5000)
+                if om_resp and om_resp.status == 200:
+                    om_json = json.loads(await om_resp.text())
+                    om_curr = om_json.get("current", {})
+                    sm1 = om_curr.get("soil_moisture_0_to_1cm")
+                    sm2 = om_curr.get("soil_moisture_1_to_3cm")
+                    soil_temp_c = om_curr.get("soil_temperature_0cm")
+
+                    sm_val = sm1 if sm1 is not None else sm2
+                    if sm_val is not None:
+                        soil_moisture_volumetric = round(sm_val, 3)
+                        soil_moisture_pct = round(min(100.0, max(0.0, (sm_val / 0.35) * 100)), 1)
+                        if sm_val < 0.12:
+                            soil_status = "Dry (Irrigation Needed)"
+                        elif sm_val > 0.32:
+                            soil_status = "Saturated / Waterlogged"
+                        else:
+                            soil_status = "Optimal Field Capacity"
+            except Exception:
+                pass
+
+        if soil_moisture_pct is None:
+            soil_moisture_pct = round(min(100.0, max(10.0, current["humidity"] * 0.45)), 1)
+            soil_status = "Estimated (Telemetry pending)"
 
         risk_alerts = []
+        if soil_moisture_volumetric is not None:
+            if soil_moisture_volumetric < 0.12:
+                risk_alerts.append("Low topsoil moisture. Deep morning irrigation recommended.")
+            elif soil_moisture_volumetric > 0.35:
+                risk_alerts.append("Topsoil saturated. Ensure adequate field furrow drainage.")
+
         for day in forecast:
             min_t = day["day"]["mintemp_c"]
             max_t = day["day"]["maxtemp_c"]
@@ -560,12 +540,15 @@ async def on_fetch(request, env):
                 risk_alerts.append("Heat stress on " + date_s + ". Increase irrigation.")
 
         return json_response({
-            "location": data["location"]["name"],
+            "location": loc_data.get("name", location),
             "current_temp": current["temp_c"],
             "condition": current["condition"]["text"],
             "humidity": current["humidity"],
             "wind_kph": current["wind_kph"],
-            "soil_moisture_estimate": min(100, current["humidity"] * 0.65),
+            "soil_moisture_estimate": soil_moisture_pct,
+            "soil_moisture_volumetric_m3": soil_moisture_volumetric,
+            "soil_temperature_c": soil_temp_c,
+            "soil_moisture_status": soil_status,
             "forecast": [
                 {
                     "date": d["date"],
@@ -590,21 +573,9 @@ async def on_fetch(request, env):
         kamis_id = crop_info["kamis_id"]
         soko_name = crop_info.get("soko_name", "")
         kg_per_unit = crop_info["kg_per_unit"]
+        unit_name = crop_info["unit"]
 
-        baselines_per_kg = {
-            "maize": {"nairobi": 55, "nyeri": 48, "nakuru": 50, "kisumu": 52, "eldoret": 45, "thika": 53, "meru": 47, "kitale": 44},
-            "tomatoes": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 92, "kitale": 88},
-            "cabbages": {"nairobi": 30, "nyeri": 25, "nakuru": 27, "kisumu": 28, "eldoret": 24, "thika": 29, "meru": 25, "kitale": 23},
-            "onions": {"nairobi": 90, "nyeri": 75, "nakuru": 80, "kisumu": 85, "eldoret": 72, "thika": 88, "meru": 74, "kitale": 70},
-            "french_beans": {"nairobi": 130, "nyeri": 115, "nakuru": 120, "kisumu": 125, "eldoret": 110, "thika": 128, "meru": 112, "kitale": 108},
-            "potatoes": {"nairobi": 80, "nyeri": 65, "nakuru": 70, "kisumu": 75, "eldoret": 60, "thika": 78, "meru": 63, "kitale": 58},
-            "wheat": {"nairobi": 110, "nyeri": 95, "nakuru": 100, "kisumu": 105, "eldoret": 90, "thika": 108, "meru": 93, "kitale": 88},
-        }
-
-        # Fetch from all three sources concurrently
         import asyncio
-
-        bora_slug = MKULIMA_BORA_SLUGS.get(crop)
 
         async def _fetch_kamis():
             if kamis_id is not None:
@@ -616,14 +587,7 @@ async def on_fetch(request, env):
                 return await scrape_mkulima_online(soko_name)
             return None
 
-        async def _fetch_bora():
-            if bora_slug:
-                return await scrape_mkulima_bora(bora_slug)
-            return None
-
-        kamis_raw, soko_raw, bora_raw = await asyncio.gather(
-            _fetch_kamis(), _fetch_soko(), _fetch_bora()
-        )
+        kamis_raw, soko_raw = await asyncio.gather(_fetch_kamis(), _fetch_soko())
 
         sources_used = []
         all_entries = {}
@@ -643,11 +607,8 @@ async def on_fetch(request, env):
         if soko_raw:
             merge_entries(soko_raw, "Mkulima Online")
             sources_used.append("Mkulima Online")
-        if bora_raw:
-            merge_entries(bora_raw, "Mkulima Bora")
-            sources_used.append("Mkulima Bora")
 
-        # --- Sanitize: filter out unreasonable prices & outliers ---
+        # Sanitize
         for key in list(all_entries.keys()):
             all_entries[key] = _sanitize_market_entries(all_entries[key], crop, kg_per_unit)
             if not all_entries[key]:
@@ -685,30 +646,36 @@ async def on_fetch(request, env):
                 "sources": entry_sources,
             })
 
-        if not market_data:
-            data_source = "baseline"
-            sources_used = ["baseline"]
-            crop_baselines = baselines_per_kg.get(crop, {})
-            for mkt_name, base_price in crop_baselines.items():
-                market_data.append({
-                    "market": mkt_name.capitalize(),
-                    "county": mkt_name.capitalize(),
-                    "wholesale_price": round(base_price * kg_per_unit, 2),
-                    "retail_price": round(base_price * 1.35 * kg_per_unit, 2),
-                    "date": "estimated",
-                    "is_key_market": mkt_name.lower() in KEY_MARKETS,
-                    "sources": ["baseline"],
-                })
+        # Save to SWR cache if live data succeeded
+        if market_data:
+            cache_payload = {
+                "markets": market_data,
+                "unit": unit_name,
+                "kg_per_unit": kg_per_unit,
+                "sources": sources_used,
+                "scraped_at": datetime.utcnow().isoformat() + "Z",
+            }
+            await _set_cache("markets:" + crop, cache_payload, env)
+        else:
+            # Fall back to genuine cached snapshot
+            cached = await _get_cache("markets:" + crop, env)
+            if cached and cached.get("markets"):
+                market_data = cached.get("markets", [])
+                data_source = "cached"
+                sources_used = cached.get("sources", ["cached"])
+            else:
+                data_source = "none"
+                sources_used = []
 
         market_data.sort(key=lambda x: (not x["is_key_market"], -(x["retail_price"] or 0)))
 
         source_label = " + ".join(sources_used) if sources_used else "none"
         if data_source == "live":
             status_text = "Live from " + source_label + " (" + str(len(market_data)) + " markets)"
-        elif data_source == "baseline":
-            status_text = "Estimated baseline prices"
+        elif data_source == "cached":
+            status_text = "Cached snapshot from KAMIS"
         else:
-            status_text = "No data available"
+            status_text = "No active market price records published today"
 
         return json_response({
             "crop": crop.capitalize(),
@@ -718,9 +685,10 @@ async def on_fetch(request, env):
             "data_source": data_source,
             "data_sources": sources_used,
             "data_status": status_text,
+            "has_data": len(market_data) > 0,
         })
 
-    # ── GET /api/analysis/<crop> (Multi-Source) ────────────────────
+    # ── GET /api/analysis/<crop> (Spatial Arbitrage) ───────────────
     m = re.match(r"^/api/analysis/(.+)$", path)
     if m and request.method == "GET":
         import math
@@ -739,8 +707,6 @@ async def on_fetch(request, env):
         user_lat = float(query.get("user_lat", [None])[0]) if query.get("user_lat") else None
         user_lon = float(query.get("user_lon", [None])[0]) if query.get("user_lon") else None
 
-        bora_slug = MKULIMA_BORA_SLUGS.get(crop)
-
         async def _fetch_kamis_a():
             if kamis_id is not None:
                 return await scrape_kamis_per_market(kamis_id)
@@ -751,14 +717,7 @@ async def on_fetch(request, env):
                 return await scrape_mkulima_online(soko_name)
             return None
 
-        async def _fetch_bora_a():
-            if bora_slug:
-                return await scrape_mkulima_bora(bora_slug)
-            return None
-
-        kamis_raw, soko_raw, bora_raw = await aio.gather(
-            _fetch_kamis_a(), _fetch_soko_a(), _fetch_bora_a()
-        )
+        kamis_raw, soko_raw = await aio.gather(_fetch_kamis_a(), _fetch_soko_a())
 
         sources_used = []
         raw_markets = []
@@ -771,38 +730,53 @@ async def on_fetch(request, env):
             for e in soko_raw:
                 raw_markets.append({**e, "_source": "Mkulima Online"})
             sources_used.append("Mkulima Online")
-        if bora_raw:
-            for e in bora_raw:
-                raw_markets.append({**e, "_source": "Mkulima Bora"})
-            sources_used.append("Mkulima Bora")
 
         data_source = "live" if sources_used else "none"
 
-        # --- Sanitize live data ---
         if raw_markets and data_source == "live":
             raw_markets = _sanitize_market_entries(raw_markets, crop, kg_per_unit)
 
         if not raw_markets:
-            data_source = "baseline"
-            sources_used = ["baseline"]
-            baselines = {
-                "maize": {"Nairobi": 55, "Nyeri": 48, "Nakuru": 50},
-                "tomatoes": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
-                "cabbages": {"Nairobi": 30, "Nyeri": 25, "Nakuru": 27},
-                "onions": {"Nairobi": 90, "Nyeri": 75, "Nakuru": 80},
-                "french_beans": {"Nairobi": 130, "Nyeri": 115, "Nakuru": 120},
-                "potatoes": {"Nairobi": 80, "Nyeri": 65, "Nakuru": 70},
-                "wheat": {"Nairobi": 110, "Nyeri": 95, "Nakuru": 100},
-            }
-            crop_base = baselines.get(crop, {"Nairobi": 50, "Nyeri": 45, "Nakuru": 48})
-            for mkt, price_per_kg in crop_base.items():
-                raw_markets.append({
-                    "market": mkt, "county": mkt,
-                    "wholesale_per_kg": price_per_kg,
-                    "retail_per_kg": round(price_per_kg * 1.35, 2),
-                    "date": "baseline",
-                    "_source": "baseline",
-                })
+            cached = await _get_cache("markets:" + crop, env)
+            if cached and cached.get("markets"):
+                for cm in cached["markets"]:
+                    ws = cm.get("wholesale_price")
+                    rt = cm.get("retail_price")
+                    if ws or rt:
+                        raw_markets.append({
+                            "market": cm["market"],
+                            "county": cm.get("county", ""),
+                            "wholesale_per_kg": round(ws / kg_per_unit, 2) if ws else None,
+                            "retail_per_kg": round(rt / kg_per_unit, 2) if rt else None,
+                            "date": cm.get("date", "cached"),
+                            "_source": "cache",
+                        })
+                if raw_markets:
+                    data_source = "cached"
+
+        # Zero fake numbers: report transparently if no market records exist
+        if not raw_markets:
+            return json_response({
+                "crop": crop.capitalize(),
+                "unit": unit_name,
+                "kg_per_unit": kg_per_unit,
+                "data_source": "none",
+                "data_sources": [],
+                "market_analysis": [],
+                "statistics": {
+                    "avg_retail": 0, "avg_wholesale": 0, "price_spread": 0,
+                    "min_retail": 0, "max_retail": 0, "volatility_cv_pct": 0,
+                },
+                "predictions": [],
+                "recommendation": {
+                    "best_sell_market": None, "best_sell_price": None,
+                    "cheapest_buy_market": None, "cheapest_buy_price": None,
+                },
+                "nearest_market": None,
+                "distance_km": None,
+                "advisory": "No market survey data available today for " + crop.capitalize() + ".",
+                "has_data": False,
+            })
 
         grouped = {}
         for entry in raw_markets:
@@ -856,22 +830,21 @@ async def on_fetch(request, env):
 
         market_summaries.sort(key=lambda x: x["retail_price"], reverse=True)
         best_market = market_summaries[0] if market_summaries else None
-        worst_market = market_summaries[-1] if market_summaries else None
         by_ws = sorted(market_summaries, key=lambda x: x["wholesale_price"])
         cheapest_source = by_ws[0] if by_ws else None
 
+        # Genuine Spatial Arbitrage & Spread Analysis
         predictions = []
-        for ms in market_summaries[:8]:
-            deviation = ((ms["retail_price"] - avg_retail) / avg_retail * 100) if avg_retail else 0
-            predicted_change_pct = round(-deviation * 0.3, 1)
-            predicted_retail = round(ms["retail_price"] * (1 + predicted_change_pct / 100), 2)
+        for ms in market_summaries[:10]:
+            spread_from_avg = round(ms["retail_price"] - avg_retail, 2) if avg_retail else 0
+            spread_pct = round((spread_from_avg / avg_retail) * 100, 1) if avg_retail else 0
 
-            if predicted_change_pct > 3:
+            if spread_pct >= 8.0:
                 trend = "rising"
-                emoji = "📈"
-            elif predicted_change_pct < -3:
+                emoji = "🟢"
+            elif spread_pct <= -8.0:
                 trend = "falling"
-                emoji = "📉"
+                emoji = "🔵"
             else:
                 trend = "stable"
                 emoji = "➡️"
@@ -879,8 +852,8 @@ async def on_fetch(request, env):
             predictions.append({
                 "market": ms["market"],
                 "current_price": ms["retail_price"],
-                "predicted_price": predicted_retail,
-                "predicted_change_pct": predicted_change_pct,
+                "predicted_price": avg_retail,
+                "predicted_change_pct": spread_pct,
                 "trend": trend,
                 "trend_emoji": emoji,
                 "confidence": "high" if cv < 15 else "medium" if cv < 30 else "low",
@@ -904,31 +877,31 @@ async def on_fetch(request, env):
         advice_lines = []
         if best_market and cheapest_source:
             advice_lines.append(
-                "🏆 Best market to sell " + crop.capitalize() + ": " + best_market["market"] +
+                "🏆 Premium destination market for " + crop.capitalize() + ": " + best_market["market"] +
                 " (KES " + str(best_market["retail_price"]) + "/" + unit_name + " retail)"
             )
             advice_lines.append(
-                "🛒 Cheapest source: " + cheapest_source["market"] +
+                "🛒 Sourcing / producing hub: " + cheapest_source["market"] +
                 " (KES " + str(cheapest_source["wholesale_price"]) + "/" + unit_name + " wholesale)"
             )
 
         if cv < 15:
-            advice_lines.append("📊 Prices are stable across markets — low arbitrage opportunity.")
+            advice_lines.append("📊 Prices are uniform across counties — local markets offer comparable returns.")
         elif cv < 30:
-            advice_lines.append("📊 Moderate price variation (CV " + str(cv) + "%) — consider selling in higher-paying markets.")
+            advice_lines.append("📊 Moderate price spread (CV " + str(cv) + "%) — consider higher-paying urban markets.")
         else:
             advice_lines.append(
-                "📊 High price disparity (CV " + str(cv) + "%) — significant arbitrage opportunity! " +
-                "Spread: KES " + str(price_spread) + "/" + unit_name + " between cheapest and most expensive market."
+                "📊 High inter-market disparity (CV " + str(cv) + "%) — strong spatial arbitrage opportunity! " +
+                "Spread: KES " + str(price_spread) + "/" + unit_name + " between lowest and highest markets."
             )
 
         if nearest_market:
             advice_lines.append(
-                "📍 Nearest major market: " + nearest_market.capitalize() + " (" + str(distance_km) + " km away)"
+                "📍 Nearest benchmark market: " + nearest_market.capitalize() + " (" + str(distance_km) + " km away)"
             )
 
         if sources_used:
-            advice_lines.append("📡 Data sources: " + ", ".join(sources_used))
+            advice_lines.append("📡 Verified sources: " + ", ".join(sources_used))
 
         return json_response({
             "crop": crop.capitalize(),
@@ -955,6 +928,7 @@ async def on_fetch(request, env):
             "nearest_market": nearest_market.capitalize() if nearest_market else None,
             "distance_km": distance_km,
             "advisory": "\n".join(advice_lines),
+            "has_data": True,
         })
 
     # ── GET /api/prices/<crop> ─────────────────────────────────────
@@ -966,8 +940,10 @@ async def on_fetch(request, env):
 
         crop_info   = CROP_MAPPING[crop]
         kamis_id    = crop_info["kamis_id"]
+        soko_name   = crop_info.get("soko_name", "")
         kg_per_unit = crop_info["kg_per_unit"]
 
+        # 1. Primary: KAMIS
         kamis_data = None
         if kamis_id is not None:
             kamis_data = await scrape_kamis_prices(kamis_id)
@@ -998,22 +974,29 @@ async def on_fetch(request, env):
             sc = kamis_data["market_count"]
             dd = kamis_data["latest_date"] or "today"
             data_status = "Live from KAMIS (" + str(sc) + " markets, " + dd + ")"
+
+            # Cache summary
+            await _set_cache("summary:" + crop, {
+                "farm_price": farm_price,
+                "wholesale_price": wholesale_price,
+                "retail_price": retail_price,
+                "data_status": data_status,
+                "date": dd,
+            }, env)
         else:
-            # --- Secondary source: Mkulima Bora ---
-            bora_slug = MKULIMA_BORA_SLUGS.get(crop)
-            bora_entries = await scrape_mkulima_bora(bora_slug) if bora_slug else None
+            # 2. Secondary: Mkulima Online
+            soko_entries = await scrape_mkulima_online(soko_name) if soko_name else None
+            if soko_entries and len(soko_entries) >= 2:
+                ws_vals = sorted([e["wholesale_per_kg"] for e in soko_entries if e.get("wholesale_per_kg")])
+                rt_vals = sorted([e["retail_per_kg"] for e in soko_entries if e.get("retail_per_kg")])
 
-            if bora_entries and len(bora_entries) >= 2:
-                ws_vals = sorted([e["wholesale_per_kg"] for e in bora_entries if e.get("wholesale_per_kg")])
-                rt_vals = sorted([e["retail_per_kg"] for e in bora_entries if e.get("retail_per_kg")])
-
-                def _med(vals):
+                def _med2(vals):
                     if not vals:
                         return None
                     return vals[len(vals) // 2]
 
-                wholesale_per_kg = _med(ws_vals) if ws_vals else (_med(rt_vals) or 0) * 0.85
-                retail_per_kg = _med(rt_vals) or wholesale_per_kg * 1.35
+                wholesale_per_kg = _med2(ws_vals) if ws_vals else (_med2(rt_vals) or 0) * 0.85
+                retail_per_kg    = _med2(rt_vals) or (wholesale_per_kg * 1.35 if wholesale_per_kg else 0)
 
                 if len(ws_vals) >= 3:
                     p25 = ws_vals[len(ws_vals) // 4]
@@ -1023,30 +1006,38 @@ async def on_fetch(request, env):
                     p25 = wholesale_per_kg * 0.85
                 farm_gate_per_kg = p25 * 0.80
 
-                farm_price      = round(farm_gate_per_kg * kg_per_unit, 2)
-                wholesale_price = round(wholesale_per_kg * kg_per_unit, 2)
-                retail_price    = round(retail_per_kg * kg_per_unit, 2)
+                farm_price      = round(farm_gate_per_kg * kg_per_unit, 2) if farm_gate_per_kg else None
+                wholesale_price = round(wholesale_per_kg * kg_per_unit, 2) if wholesale_per_kg else None
+                retail_price    = round(retail_per_kg * kg_per_unit, 2) if retail_per_kg else None
 
-                latest_date = max((e.get("date", "") for e in bora_entries if e.get("date")), default="recent")
-                data_status = "Live from Mkulima Bora (" + str(len(bora_entries)) + " markets, " + latest_date + ")"
+                latest_date = max((e.get("date", "") for e in soko_entries if e.get("date")), default="recent")
+                data_status = "Live from Mkulima Online (" + str(len(soko_entries)) + " markets, " + latest_date + ")"
+
+                await _set_cache("summary:" + crop, {
+                    "farm_price": farm_price,
+                    "wholesale_price": wholesale_price,
+                    "retail_price": retail_price,
+                    "data_status": data_status,
+                    "date": latest_date,
+                }, env)
             else:
-                # Last resort: hardcoded baselines
-                baselines = {
-                    "maize": 50, "tomatoes": 100, "cabbages": 27,
-                    "onions": 80, "french_beans": 120, "potatoes": 70, "wheat": 100,
-                }
-                base = baselines.get(crop, 50)
-                fg_pk  = base * 0.85
-                ws_pk  = base
-                rt_pk  = base * 1.50
-                farm_price      = round(fg_pk * kg_per_unit, 2)
-                wholesale_price = round(ws_pk * kg_per_unit, 2)
-                retail_price    = round(rt_pk * kg_per_unit, 2)
-                data_status     = "Estimated baseline (KAMIS & Mkulima Bora unavailable)"
+                # 3. Read from genuine cached snapshot (SWR)
+                cached = await _get_cache("summary:" + crop, env)
+                if cached and cached.get("retail_price"):
+                    farm_price = cached.get("farm_price")
+                    wholesale_price = cached.get("wholesale_price")
+                    retail_price = cached.get("retail_price")
+                    c_date = cached.get("date", "recent")
+                    data_status = "Cached snapshot from KAMIS (" + str(c_date) + ")"
+                else:
+                    farm_price = None
+                    wholesale_price = None
+                    retail_price = None
+                    data_status = "No official market records reported today (KAMIS survey pending)"
 
         margin = (
             round(((retail_price - farm_price) / farm_price) * 100, 2)
-            if farm_price else 0
+            if (farm_price and retail_price and farm_price > 0) else 0
         )
 
         return json_response({
@@ -1057,6 +1048,7 @@ async def on_fetch(request, env):
             "retail_price_ksh": retail_price,
             "profit_margin_estimate": margin,
             "data_status": data_status,
+            "has_data": retail_price is not None,
         })
 
     # ── POST /api/comments — Submit feedback ─────────────────────────

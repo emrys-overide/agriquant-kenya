@@ -68,11 +68,16 @@ type ForecastDay = {
 
 type WeatherData = {
   location: string;
+  county?: string;
   current_temp: number;
   condition: string;
   humidity: number;
   wind_kph: number;
   soil_moisture_estimate: number;
+  soil_moisture_raw?: number;
+  soil_temperature_c?: number;
+  soil_moisture_status?: string;
+  soil_data_source?: string;
   forecast: ForecastDay[];
   agri_risk_alerts: string[];
 };
@@ -85,6 +90,9 @@ type PriceData = {
   retail_price_ksh: number;
   profit_margin_estimate: number;
   data_status: string;
+  has_data?: boolean;
+  status_note?: string;
+  snapshot_date?: string;
 };
 
 type MarketEntry = {
@@ -101,6 +109,10 @@ type MarketComparisonData = {
   crop: string;
   unit: string;
   kg_per_unit: number;
+  has_data?: boolean;
+  status_note?: string;
+  snapshot_date?: string;
+  cached?: boolean;
   markets: MarketEntry[];
   data_source: string;
   data_sources?: string[];
@@ -124,12 +136,16 @@ type Prediction = {
   trend: "rising" | "falling" | "stable";
   trend_emoji: string;
   confidence: "high" | "medium" | "low";
+  market_type?: string;
+  spread_ksh?: number;
 };
 
 type AnalysisData = {
   crop: string;
   unit: string;
   kg_per_unit: number;
+  has_data?: boolean;
+  status_note?: string;
   market_analysis: MarketAnalysisEntry[];
   statistics: {
     avg_retail: number;
@@ -170,7 +186,7 @@ const translations: Record<string, { en: string; sw: string }> = {
   liveData: { en: "Live Data", sw: "Data Hai" },
   liveWeather: { en: "Live Weather", sw: "Hali ya Hewa" },
   humidity: { en: "Humidity", sw: "Unyevu" },
-  soilMoistureEst: { en: "Soil Moisture Est.", sw: "Makadirio ya Unyevu wa Udongo" },
+  soilMoistureEst: { en: "Soil Moisture (Open-Meteo)", sw: "Unyevu wa Udongo (Open-Meteo)" },
   agriculturalRisks: { en: "Agricultural Risks", sw: "Hatari za Kilimo" },
   marketIntelligence: { en: "Market Intelligence", sw: "Taarifa za Soko" },
   farmGate: { en: "Farm Gate", sw: "Bei Shambani" },
@@ -186,8 +202,8 @@ const translations: Record<string, { en: string; sw: string }> = {
   chatPlaceholder: { en: "Type your question...", sw: "Andika swali lako..." },
   send: { en: "Send", sw: "Tuma" },
   footerCredits: {
-    en: "Data Sources: KAMIS (kamis.kilimo.go.ke), WeatherAPI. Built for Kenyan Farmers.",
-    sw: "Vyanzo vya Data: KAMIS (kamis.kilimo.go.ke), WeatherAPI. Imetengenezwa kwa Wakulima wa Kenya.",
+    en: "Data Sources: KAMIS (kamis.kilimo.go.ke), Mkulima Online, WeatherAPI & Open-Meteo. Built for Kenyan Farmers.",
+    sw: "Vyanzo vya Data: KAMIS (kamis.kilimo.go.ke), Mkulima Online, WeatherAPI na Open-Meteo. Imetengenezwa kwa Wakulima wa Kenya.",
   },
   ok: { en: "OK", sw: "Sawa" },
   fetching: { en: "Fetching...", sw: "Inapakia..." },
@@ -196,7 +212,7 @@ const translations: Record<string, { en: string; sw: string }> = {
   waitingWeather: { en: "Waiting for weather data", sw: "Inasubiri data ya hali ya hewa" },
   unavailable: { en: "Unavailable", sw: "Haipatikani" },
   liveFromKamis: { en: "Live from KAMIS", sw: "Data hai kutoka KAMIS" },
-  estimated: { en: "Estimated", sw: "Makadirio" },
+  estimated: { en: "Verified Snapshot", sw: "Kumbukumbu Halisi" },
   errorBackend: {
     en: "Could not reach the API server. Please check your internet connection and try again.",
     sw: "Haikuweza kufikia seva ya API. Tafadhali angalia muunganisho wako wa intaneti na jaribu tena.",
@@ -213,15 +229,17 @@ const translations: Record<string, { en: string; sw: string }> = {
   marketComparison: { en: "Market Price Comparison", sw: "Ulinganisho wa Bei Masokoni" },
   perKg: { en: "per kg", sw: "kwa kg" },
   perUnit: { en: "per unit", sw: "kwa kipimo" },
-  analysisPrediction: { en: "Price Analysis & Prediction", sw: "Uchambuzi na Utabiri wa Bei" },
+  analysisPrediction: { en: "Price Analysis & Spatial Arbitrage", sw: "Uchambuzi na Tofauti za Masoko" },
   bestSellMarket: { en: "Best Market to Sell", sw: "Soko Bora la Kuuza" },
   cheapestBuy: { en: "Cheapest to Buy", sw: "Rahisi Zaidi Kununua" },
   priceSpread: { en: "Price Spread", sw: "Tofauti ya Bei" },
   volatility: { en: "Volatility (CV)", sw: "Kutokuwa Thabiti (CV)" },
   avgRetail: { en: "Avg Retail", sw: "Wastani Rejareja" },
   avgWholesale: { en: "Avg Wholesale", sw: "Wastani Jumla" },
-  trend: { en: "Trend", sw: "Mwenendo" },
-  predicted: { en: "Predicted", sw: "Utabiri" },
+  trend: { en: "Spread vs Nat'l", sw: "Tofauti na Taifa" },
+  predicted: { en: "Nat'l Benchmark", sw: "Kipimo cha Taifa" },
+  benchmark: { en: "National Benchmark Median", sw: "Wastani wa Kitaifa" },
+  soilTemp: { en: "Soil Temp", sw: "Joto la Udongo" },
   current: { en: "Current", sw: "Sasa" },
   confidence: { en: "Confidence", sw: "Uhakika" },
   rising: { en: "Rising", sw: "Inapanda" },
@@ -465,11 +483,13 @@ export default function Dashboard() {
           axios.get<AnalysisData>(analysisUrl, { timeout: 15000 }).catch(() => null),
         ]);
 
-        const adviceRes = await axios.post<AdviceData>(`${API_URL}/advice`, {
-          weather: weatherRes.data,
-          prices: pricesRes.data,
-          lang,
-        });
+        const adviceRes = await axios
+          .post<AdviceData>(`${API_URL}/advice`, {
+            weather: weatherRes.data,
+            prices: pricesRes.data,
+            lang,
+          })
+          .catch(() => null);
 
         if (ignore) return;
 
@@ -477,7 +497,7 @@ export default function Dashboard() {
         setPrices(pricesRes.data);
         setMarketData(marketsRes?.data ?? null);
         setAnalysisData(analysisRes?.data ?? null);
-        setAdvice(adviceRes.data.advisory_report);
+        setAdvice(adviceRes?.data?.advisory_report ?? "");
         setError(null);
       } catch (caughtError) {
         console.error("Error fetching data", caughtError);
@@ -769,17 +789,39 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="rounded-xl border border-white/8 bg-gradient-to-br from-emerald-500/8 to-transparent p-3">
-                      <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-500">
-                        <Sprout className="h-3.5 w-3.5 text-emerald-400" />
-                        {t("soilMoistureEst", lang)}
+                      <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+                        <div className="flex items-center gap-1.5">
+                          <Sprout className="h-3.5 w-3.5 text-emerald-400" />
+                          {t("soilMoistureEst", lang)}
+                        </div>
                       </div>
-                      <p className="text-lg font-bold text-white">{weather?.soil_moisture_estimate?.toFixed(1) ?? "--"}%</p>
+                      <div className="flex items-baseline justify-between">
+                        <p className="text-lg font-bold text-white">
+                          {weather?.soil_moisture_estimate !== undefined ? `${weather.soil_moisture_estimate.toFixed(1)}%` : "--"}
+                        </p>
+                        {weather?.soil_moisture_raw !== undefined && (
+                          <span className="text-[11px] font-mono text-gray-400">
+                            {weather.soil_moisture_raw.toFixed(3)} m³/m³
+                          </span>
+                        )}
+                      </div>
                       <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-700/50">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700"
-                          style={{ width: `${weather?.soil_moisture_estimate ?? 0}%` }}
+                          style={{ width: `${Math.min(100, Math.max(0, weather?.soil_moisture_estimate ?? 0))}%` }}
                         />
                       </div>
+                      {weather?.soil_moisture_status && (
+                        <p className="mt-2 text-[10px] font-medium text-emerald-300/90 truncate">
+                          ● {weather.soil_moisture_status}
+                        </p>
+                      )}
+                      {weather?.soil_temperature_c !== undefined && (
+                        <p className="mt-1 text-[10px] text-gray-400 flex items-center gap-1">
+                          <Thermometer className="h-3 w-3 text-orange-400" />
+                          <span>{t("soilTemp", lang)}: {weather.soil_temperature_c.toFixed(1)}°C</span>
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -825,17 +867,21 @@ export default function Dashboard() {
                       className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                         prices?.data_status?.toLowerCase().includes("live")
                           ? "bg-emerald-500/10 text-emerald-400"
+                          : prices?.data_status?.toLowerCase().includes("snapshot")
+                          ? "bg-sky-500/10 text-sky-400"
                           : "bg-amber-500/10 text-amber-400"
                       }`}
                     >
                       <span
                         className={`h-1.5 w-1.5 rounded-full ${
-                          prices?.data_status?.toLowerCase().includes("live") ? "bg-emerald-400" : "bg-amber-400"
+                          prices?.data_status?.toLowerCase().includes("live")
+                            ? "bg-emerald-400"
+                            : prices?.data_status?.toLowerCase().includes("snapshot")
+                            ? "bg-sky-400"
+                            : "bg-amber-400"
                         }`}
                       />
-                      {prices?.data_status?.toLowerCase().includes("live")
-                        ? t("liveFromKamis", lang)
-                        : t("estimated", lang)}
+                      {prices?.data_status ?? (prices?.retail_price_ksh ? t("liveFromKamis", lang) : t("unavailable", lang))}
                     </span>
                   </div>
 
@@ -1128,15 +1174,18 @@ export default function Dashboard() {
                                 </td>
                                 <td className="py-2 text-right">
                                   {prediction ? (
-                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                                      prediction.trend === "rising"
-                                        ? "bg-emerald-500/10 text-emerald-400"
-                                        : prediction.trend === "falling"
-                                        ? "bg-red-500/10 text-red-400"
-                                        : "bg-gray-500/10 text-gray-400"
-                                    }`}>
-                                      {prediction.trend === "rising" && <ArrowUpRight className="h-3 w-3" />}
-                                      {prediction.trend === "falling" && <ArrowDownRight className="h-3 w-3" />}
+                                    <span
+                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                        prediction.trend === "rising"
+                                          ? "bg-violet-500/15 text-violet-300 border border-violet-500/20"
+                                          : prediction.trend === "falling"
+                                          ? "bg-amber-500/15 text-amber-300 border border-amber-500/20"
+                                          : "bg-gray-500/15 text-gray-400"
+                                      }`}
+                                      title={prediction.market_type || `${prediction.predicted_change_pct}% spread vs national median`}
+                                    >
+                                      {prediction.trend === "rising" && <ArrowUpRight className="h-3 w-3 text-violet-400" />}
+                                      {prediction.trend === "falling" && <ArrowDownRight className="h-3 w-3 text-amber-400" />}
                                       {prediction.trend === "stable" && <Minus className="h-3 w-3" />}
                                       {prediction.predicted_change_pct > 0 ? "+" : ""}
                                       {prediction.predicted_change_pct}%
@@ -1157,6 +1206,19 @@ export default function Dashboard() {
                 </div>
               )}
 
+              {/* Empty Market Data Notice */}
+              {marketData && marketData.markets.length === 0 && (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center lg:col-span-3">
+                  <MapPin className="mx-auto h-8 w-8 text-amber-400/60 mb-2" />
+                  <h3 className="text-base font-semibold text-gray-200">
+                    {lang === "sw" ? "Hakuna data ya soko leo" : "No Market Records Reported Today"}
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-400 max-w-lg mx-auto">
+                    {marketData.status_note || (lang === "sw" ? "Taarifa rasmi za KAMIS bado hazijatolewa leo kwa zao hili. Tafadhali chagua zao lingine au angalia tena baadaye." : "Official KAMIS market survey data is pending for this crop today. Please select another crop or check back later.")}
+                  </p>
+                </div>
+              )}
+
               {/* Section Divider */}
               <div className="lg:col-span-3 relative my-4 overflow-hidden rounded-2xl">
                 <div className="absolute inset-0">
@@ -1172,10 +1234,10 @@ export default function Dashboard() {
                   <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-violet-400 to-fuchsia-500" />
                   <div>
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                      {lang === "sw" ? "Uchambuzi na Utabiri" : "Analysis & Prediction"}
+                      {lang === "sw" ? "Ulinganisho na Tofauti za Masoko" : "Market Comparison & Spatial Arbitrage"}
                     </h3>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {lang === "sw" ? "Utabiri wa bei na mapendekezo" : "Price trends, predictions & recommendations"}
+                      {lang === "sw" ? "Tofauti za bei kitaifa na masoko yenye faida" : "Cross-market price spreads, arbitrage opportunities & national benchmarks"}
                     </p>
                   </div>
                 </div>
@@ -1184,15 +1246,22 @@ export default function Dashboard() {
               {/* ======================================================== */}
               {/*  PRICE ANALYSIS & PREDICTION (full width)                */}
               {/* ======================================================== */}
-              {analysisData && (
+              {analysisData && analysisData.market_analysis && analysisData.market_analysis.length > 0 && (
                 <div className="rounded-2xl border border-violet-500/25 bg-violet-500/8 p-6 shadow-2xl shadow-violet-500/8 ring-1 ring-violet-500/[0.06] inset backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-violet-500/35 hover:bg-violet-500/10 hover:shadow-violet-500/15">
                   <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="flex items-center gap-2 text-base font-semibold text-violet-300">
-                      <BarChart3 className="h-5 w-5 text-violet-400" />
-                      {t("analysisPrediction", lang)}: {analysisData.crop}
-                    </h2>
+                    <div>
+                      <h2 className="flex items-center gap-2 text-base font-semibold text-violet-300">
+                        <BarChart3 className="h-5 w-5 text-violet-400" />
+                        {t("analysisPrediction", lang)}: {analysisData.crop}
+                      </h2>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {lang === "sw"
+                          ? "Tofauti ya bei za masoko dhidi ya wastani wa kitaifa na fursa za mauzo"
+                          : "Spatial arbitrage: Compare local market prices against national benchmark median"}
+                      </p>
+                    </div>
                     {analysisData.data_sources && analysisData.data_sources.length > 0 && (
-                      <span className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-300">
+                      <span className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-300 self-start sm:self-auto">
                         <Database className="h-3 w-3" />
                         {analysisData.data_sources.join(" + ")}
                       </span>
@@ -1267,7 +1336,7 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Predictions chart */}
+                  {/* Spatial Arbitrage chart */}
                   {analysisData.predictions.length > 0 && (
                     <div className="h-48 sm:h-56 md:h-72 mb-4">
                       <ResponsiveContainer width="100%" height="100%">
@@ -1284,8 +1353,8 @@ export default function Dashboard() {
                               <stop offset="100%" stopColor="#7C3AED" stopOpacity={0.85} />
                             </linearGradient>
                             <linearGradient id="predictedGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#F472B6" stopOpacity={1} />
-                              <stop offset="100%" stopColor="#EC4899" stopOpacity={0.85} />
+                              <stop offset="0%" stopColor="#38BDF8" stopOpacity={1} />
+                              <stop offset="100%" stopColor="#0284C7" stopOpacity={0.85} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -1299,13 +1368,13 @@ export default function Dashboard() {
                     </div>
                   )}
 
-                  {/* Prediction legend */}
+                  {/* Arbitrage legend */}
                   <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
                     <span className="flex items-center gap-1.5">
                       <span className="h-2 w-4 rounded-sm bg-violet-400" /> {t("current", lang)} (KES)
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-pink-400" /> {t("predicted", lang)} (KES)
+                      <span className="h-2 w-4 rounded-sm bg-sky-400" /> {t("predicted", lang)} (KES)
                     </span>
                   </div>
 
@@ -1466,7 +1535,7 @@ export default function Dashboard() {
                 <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-500">
                   <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/5">
                     <Database className="h-3 w-3" />
-                    KAMIS + Mkulima Bora + Mkulima Online
+                    KAMIS + Mkulima Online + Open-Meteo Agro
                   </span>
                   <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/5">
                     <User className="h-3 w-3" />

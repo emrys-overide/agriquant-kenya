@@ -39,3 +39,4 @@ desktop.ini
 *.RTF
 ~$*
 frontend_scaffold_tmp/
+price_cache.json
