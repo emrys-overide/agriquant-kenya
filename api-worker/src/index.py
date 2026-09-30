@@ -122,7 +122,7 @@ def json_response(data, status=200):
     h.set("Content-Type", "application/json")
     h.set("Access-Control-Allow-Origin", "*")
     h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    h.set("Access-Control-Allow-Headers", "Content-Type")
+    h.set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password")
     return Response.new(json.dumps(data), status=status, headers=h)
 
 
@@ -135,7 +135,7 @@ def cors_preflight():
     h = Headers.new()
     h.set("Access-Control-Allow-Origin", "*")
     h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    h.set("Access-Control-Allow-Headers", "Content-Type")
+    h.set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Password")
     return Response.new(None, status=204, headers=h)
 
 
@@ -439,7 +439,7 @@ async def on_fetch(request, env):
                 "advice": "POST /api/advice",
                 "chat": "POST /api/chat",
                 "submit_feedback": "POST /api/comments",
-                "get_feedback": "GET /api/comments?password=<admin_password>",
+                "get_feedback": "GET /api/comments (X-Admin-Password header)",
             },
             "data_sources": [
                 "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
@@ -1099,7 +1099,7 @@ async def on_fetch(request, env):
 
     # ── GET /api/comments — Admin: retrieve all feedback ─────────────
     if path == "/api/comments" and request.method == "GET":
-        password = query.get("password", [""])[0]
+        password = request.headers.get("X-Admin-Password") or ""
         admin_pw = env.ADMIN_PASSWORD if hasattr(env, "ADMIN_PASSWORD") else ""
 
         if not admin_pw or password != admin_pw:
