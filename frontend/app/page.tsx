@@ -390,7 +390,7 @@ export default function Dashboard() {
     setAdminLoading(true);
     try {
       const res = await axios.get(`${API_URL}/comments`, {
-        params: { password: adminPass },
+        headers: { "X-Admin-Password": adminPass },
       });
       if (res.data?.authorized) {
         setAdminAuthed(true);
