@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import random
 import urllib3
 import json
+import hmac
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = FastAPI(title="Kenya Agri-Predict Dashboard API")
@@ -164,7 +165,7 @@ async def api_info():
             "advice": "POST /api/advice",
             "chat": "POST /api/chat",
             "submit_feedback": "POST /api/comments",
-            "get_feedback": "GET /api/comments?password=<admin_password>",
+            "get_feedback": "GET /api/comments (X-Admin-Password header)",
         },
         "data_sources": [
             "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
@@ -1389,9 +1390,9 @@ async def submit_comment(data: dict):
 
 
 @app.get("/api/comments")
-async def get_comments(password: str = ""):
+async def get_comments(x_admin_password: str = Header(default="")):
     """Retrieve all comments (admin only, password-protected)."""
-    if not ADMIN_PASSWORD or password != ADMIN_PASSWORD:
+    if not ADMIN_PASSWORD or not hmac.compare_digest(x_admin_password, ADMIN_PASSWORD):
         return {"authorized": False, "comments": []}
     comments = _load_comments()
     return {"authorized": True, "comments": comments}
