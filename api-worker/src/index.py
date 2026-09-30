@@ -19,7 +19,7 @@ from urllib.parse import urlparse, parse_qs
 
 # ── Configuration ──────────────────────────────────────────────────
 
-WEATHER_API_KEY = "7bb7778e1e2b4ec5a7050654260506"
+WEATHER_API_KEY = ""
 
 CROP_MAPPING = {
     "maize":         {"unit": "90kg Bag",        "kamis_id": 1,    "kg_per_unit": 90,  "soko_name": "Dry Maize"},
@@ -1100,9 +1100,9 @@ async def on_fetch(request, env):
     # ── GET /api/comments — Admin: retrieve all feedback ─────────────
     if path == "/api/comments" and request.method == "GET":
         password = query.get("password", [""])[0]
-        admin_pw = env.ADMIN_PASSWORD if hasattr(env, "ADMIN_PASSWORD") else "agriquant2026"
+        admin_pw = env.ADMIN_PASSWORD if hasattr(env, "ADMIN_PASSWORD") else ""
 
-        if password != admin_pw:
+        if not admin_pw or password != admin_pw:
             return json_response({"authorized": False, "comments": []})
 
         try:
