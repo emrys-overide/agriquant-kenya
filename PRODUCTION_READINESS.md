@@ -5,6 +5,7 @@ A Next.js dashboard, FastAPI backend, Cloudflare Worker, and deployment notes ex
 
 ## Work completed on this branch
 - Remove committed credential values and fail closed when admin authentication is unconfigured.
+- Move admin access from URL query parameters to an `X-Admin-Password` header in both backends and the frontend.
 - Document secret setup and rotation of exposed credentials.
 
 ## Remaining release gates
@@ -14,3 +15,6 @@ A Next.js dashboard, FastAPI backend, Cloudflare Worker, and deployment notes ex
 4. Reconcile frontend API URL with environment configuration and verify CORS policy for intended origins.
 5. Validate data source terms, freshness, units, error messaging, and agricultural advice with domain experts.
 6. Run staged deployment checks, security review, accessibility checks, monitoring/alerting, rollback exercise, and release approval.
+
+## Secret setup for deployment
+Set `WEATHER_API_KEY` and `ADMIN_PASSWORD` as Cloudflare Worker secrets with `npx wrangler secret put WEATHER_API_KEY` and `npx wrangler secret put ADMIN_PASSWORD` from `api-worker`. Set the same names as environment variables for local FastAPI. Never put credential values in `wrangler.toml`, source, or an issue. Configure `GEMINI_API_KEY` as a secret only if chat is enabled. Rotate the previously committed credentials before release; removing them from the branch does not revoke them or erase Git history.
