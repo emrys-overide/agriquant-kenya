@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 # --- CONFIGURATION ---
-WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY", "7bb7778e1e2b4ec5a7050654260506")
+WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini")  # configurable for future providers
 
@@ -1347,7 +1347,7 @@ async def gemini_chat(payload: dict):
 import uuid
 
 COMMENTS_FILE = os.path.join(os.path.dirname(__file__), "comments.json")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "agriquant2026")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 
 def _load_comments() -> list:
@@ -1391,7 +1391,7 @@ async def submit_comment(data: dict):
 @app.get("/api/comments")
 async def get_comments(password: str = ""):
     """Retrieve all comments (admin only, password-protected)."""
-    if password != ADMIN_PASSWORD:
+    if not ADMIN_PASSWORD or password != ADMIN_PASSWORD:
         return {"authorized": False, "comments": []}
     comments = _load_comments()
     return {"authorized": True, "comments": comments}
