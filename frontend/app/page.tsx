@@ -52,9 +52,10 @@ import {
 /* ------------------------------------------------------------------ */
 
 const API_URL =
-  process.env.NODE_ENV === "development"
+  process.env.NEXT_PUBLIC_AGRIQUANT_API_URL ??
+  (process.env.NODE_ENV === "development"
     ? "/api"
-    : "https://agriquant-api.emryspaul7.workers.dev/api";
+    : "https://agriquant-api.emryspaul7.workers.dev/api");
 
 type Crop = "maize" | "tomatoes" | "cabbages" | "onions" | "french_beans" | "potatoes" | "wheat";
 
