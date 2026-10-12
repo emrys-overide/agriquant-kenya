@@ -4,9 +4,7 @@ compatibility_date = "2024-12-01"
 compatibility_flags = ["python_workers"]
 
 [vars]
-WEATHER_API_KEY = "7bb7778e1e2b4ec5a7050654260506"
-ADMIN_PASSWORD = "agriquant2026"
-
+# Non-secret configuration only. Configure secrets separately with `wrangler secret put`.
 [[kv_namespaces]]
 binding = "COMMENTS"
 id = "c480afa2b7564abc8bf82d485c050a0b"

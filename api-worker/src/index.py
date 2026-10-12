@@ -19,7 +19,6 @@ from urllib.parse import urlparse, parse_qs
 
 # ── Configuration ──────────────────────────────────────────────────
 
-WEATHER_API_KEY = "7bb7778e1e2b4ec5a7050654260506"
 
 CROP_MAPPING = {
     "maize":         {"unit": "90kg Bag",        "kamis_id": 1,    "kg_per_unit": 90,  "soko_name": "Dry Maize"},
@@ -120,9 +119,10 @@ def json_response(data, status=200):
     # Create Headers object empty, then set each header individually
     h = Headers.new()
     h.set("Content-Type", "application/json")
-    h.set("Access-Control-Allow-Origin", "*")
+    h.set("Access-Control-Allow-Origin", "https://agriquant-kenya.pages.dev")
+    h.set("Vary", "Origin")
     h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    h.set("Access-Control-Allow-Headers", "Content-Type")
+    h.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
     return Response.new(json.dumps(data), status=status, headers=h)
 
 
@@ -133,9 +133,10 @@ def error_response(detail, status=500):
 def cors_preflight():
     """Return a 204 response for CORS preflight."""
     h = Headers.new()
-    h.set("Access-Control-Allow-Origin", "*")
+    h.set("Access-Control-Allow-Origin", "https://agriquant-kenya.pages.dev")
+    h.set("Vary", "Origin")
     h.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-    h.set("Access-Control-Allow-Headers", "Content-Type")
+    h.set("Access-Control-Allow-Headers", "Content-Type, Authorization")
     return Response.new(None, status=204, headers=h)
 
 
@@ -439,7 +440,7 @@ async def on_fetch(request, env):
                 "advice": "POST /api/advice",
                 "chat": "POST /api/chat",
                 "submit_feedback": "POST /api/comments",
-                "get_feedback": "GET /api/comments?password=<admin_password>",
+                "get_feedback": "GET /api/comments (admin bearer authentication required)",
             },
             "data_sources": [
                 "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
@@ -456,24 +457,24 @@ async def on_fetch(request, env):
         if not location:
             return error_response("Location is required.", 400)
 
-        wapi_key = WEATHER_API_KEY
         try:
-            wapi_key = env.WEATHER_API_KEY or wapi_key
+            wapi_key = env.WEATHER_API_KEY
         except Exception:
-            pass
-
+            wapi_key = ""
+        if not wapi_key:
+            return error_response("Weather service is not configured.", 503)
+        from urllib.parse import quote
         api_url = (
-            "http://api.weatherapi.com/v1/forecast.json"
-            "?key=" + wapi_key + "&q=" + location + ",+Kenya&days=14&aqi=no&alerts=yes"
+            "https://api.weatherapi.com/v1/forecast.json"
+            "?key=" + quote(wapi_key, safe="") + "&q=" + quote(location + ", Kenya", safe="") + "&days=14&aqi=no&alerts=yes"
         )
-
         try:
             resp = await fetch(api_url)
             if resp.status != 200:
                 return error_response("Location '" + location + "' not found in Kenya.", 404)
             data = json.loads(await resp.text())
         except Exception as e:
-            return error_response("Weather API error: " + str(e), 500)
+            return error_response("Weather provider request failed.", 502)
 
         current  = data["current"]
         forecast = data["forecast"]["forecastday"]
@@ -1054,22 +1055,27 @@ async def on_fetch(request, env):
     # ── POST /api/comments — Submit feedback ─────────────────────────
     if path == "/api/comments" and request.method == "POST":
         try:
-            body = json.loads(await request.text())
+            body_text = await request.text()
+            if len(body_text.encode("utf-8")) > 16_384:
+                return json_response({"error": "Request body too large."}, status=413)
+            body = json.loads(body_text)
         except Exception:
             return json_response({"error": "Invalid JSON"}, status=400)
 
-        name = (body.get("name") or "").strip()[:100]
-        email = (body.get("email") or "").strip()[:200]
-        message = (body.get("message") or "").strip()[:2000]
+        if not isinstance(body, dict):
+            return json_response({"error": "JSON object required."}, status=400)
+        name, email, message = body.get("name") or "", body.get("email") or "", body.get("message") or ""
         rating = body.get("rating", 0)
-
+        if not all(isinstance(value, str) for value in (name, email, message)):
+            return json_response({"error": "Feedback fields must be strings."}, status=400)
+        name, email, message = name.strip(), email.strip(), message.strip()
         if not name or not message:
             return json_response({"error": "Name and message are required."}, status=400)
-
-        if not isinstance(rating, (int, float)):
-            rating = 0
-        rating = max(0, min(5, int(rating)))
-
+        if len(name) > 100 or len(email) > 200 or len(message) > 2000:
+            return json_response({"error": "Feedback fields exceed the allowed length."}, status=400)
+        if isinstance(rating, bool) or not isinstance(rating, (int, float)) or not 0 <= rating <= 5:
+            return json_response({"error": "Rating must be a number between 0 and 5."}, status=400)
+        rating = int(rating)
         # Load existing comments from KV
         try:
             existing = await env.COMMENTS.get("all_comments")
@@ -1088,35 +1094,42 @@ async def on_fetch(request, env):
         }
 
         comments.insert(0, comment)  # newest first
+        comments = comments[:500]
 
         # Store back to KV
         try:
             await env.COMMENTS.put("all_comments", json.dumps(comments))
         except Exception as e:
-            return json_response({"error": "Could not save feedback: " + str(e)}, status=500)
+            return json_response({"error": "Could not save feedback."}, status=500)
 
         return json_response({"success": True, "message": "Feedback submitted. Thank you!"})
 
     # ── GET /api/comments — Admin: retrieve all feedback ─────────────
     if path == "/api/comments" and request.method == "GET":
-        password = query.get("password", [""])[0]
-        admin_pw = env.ADMIN_PASSWORD if hasattr(env, "ADMIN_PASSWORD") else "agriquant2026"
-
-        if password != admin_pw:
-            return json_response({"authorized": False, "comments": []})
-
+        try:
+            admin_token = env.ADMIN_TOKEN
+        except Exception:
+            admin_token = ""
+        if not admin_token:
+            return error_response("Feedback administration is not configured.", 503)
+        authorization = request.headers.get("Authorization", "")
+        supplied = authorization[7:].strip() if authorization.startswith("Bearer ") else ""
+        import hmac
+        if not hmac.compare_digest(supplied, admin_token):
+            return error_response("Authentication required.", 401)
         try:
             existing = await env.COMMENTS.get("all_comments")
             comments = json.loads(existing) if existing else []
         except Exception:
             comments = []
-
-        return json_response({"authorized": True, "comments": comments})
-
+        return json_response({"authorized": True, "comments": comments[:500]})
     # ── POST /api/advice ───────────────────────────────────────────
     if path == "/api/advice" and request.method == "POST":
         try:
-            body = json.loads(await request.text())
+            body_text = await request.text()
+            if len(body_text.encode("utf-8")) > 32_768:
+                return error_response("Request body too large.", 413)
+            body = json.loads(body_text)
         except Exception:
             return error_response("Invalid JSON body.", 400)
 
@@ -1274,7 +1287,10 @@ async def on_fetch(request, env):
     # ── POST /api/chat (Gemini) ────────────────────────────────────
     if path == "/api/chat" and request.method == "POST":
         try:
-            body = json.loads(await request.text())
+            body_text = await request.text()
+            if len(body_text.encode("utf-8")) > 32_768:
+                return error_response("Request body too large.", 413)
+            body = json.loads(body_text)
         except Exception:
             return error_response("Invalid JSON body.", 400)
 
@@ -1292,6 +1308,10 @@ async def on_fetch(request, env):
 
         messages = body.get("messages", [])
         context  = body.get("context", {})
+        if not isinstance(messages, list) or len(messages) > 20 or not isinstance(context, dict):
+            return error_response("Invalid chat payload.", 400)
+        if any(not isinstance(msg, dict) or not isinstance(msg.get("content", ""), str) or len(msg.get("content", "")) > 4000 for msg in messages):
+            return error_response("Chat message is invalid or too long.", 400)
         lang     = body.get("lang", "en")
 
         location     = context.get("location", "Kenya")
@@ -1340,10 +1360,7 @@ async def on_fetch(request, env):
             role = "user" if msg.get("role", "user") == "user" else "model"
             contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
 
-        gemini_url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            "gemini-2.0-flash:generateContent?key=" + gemini_key
-        )
+        gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
         gemini_body = json.dumps({
             "contents": contents,
             "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
@@ -1352,15 +1369,15 @@ async def on_fetch(request, env):
         try:
             resp = await fetch(gemini_url, Object.fromEntries([
                 ["method", "POST"],
-                ["headers", Object.fromEntries([["Content-Type", "application/json"]])],
+                ["headers", Object.fromEntries([["Content-Type", "application/json"], ["x-goog-api-key", gemini_key]])],
                 ["body", gemini_body],
             ]))
             if resp.status != 200:
                 err_text = await resp.text()
-                return error_response("Gemini API error: " + err_text, 502)
+                return error_response("AI provider request failed.", 502)
             result = json.loads(await resp.text())
         except Exception as e:
-            return error_response("Failed to reach Gemini API: " + str(e), 500)
+            return error_response("AI provider is temporarily unavailable.", 502)
 
         try:
             reply_text = result["candidates"][0]["content"]["parts"][0]["text"]

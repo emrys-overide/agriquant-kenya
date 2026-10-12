@@ -390,7 +390,7 @@ export default function Dashboard() {
     setAdminLoading(true);
     try {
       const res = await axios.get(`${API_URL}/comments`, {
-        params: { password: adminPass },
+        headers: { Authorization: `Bearer ${adminPass}` },
       });
       if (res.data?.authorized) {
         setAdminAuthed(true);
@@ -1663,14 +1663,14 @@ export default function Dashboard() {
             {/* Auth gate */}
             {!adminAuthed ? (
               <div className="p-6">
-                <p className="text-xs text-gray-500 mb-3">Enter the admin password to view feedback.</p>
+                <p className="text-xs text-gray-500 mb-3">Enter the admin access token to view feedback.</p>
                 <div className="flex gap-2">
                   <input
                     type="password"
                     value={adminPass}
                     onChange={(e) => setAdminPass(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") fetchComments(); }}
-                    placeholder="Admin password"
+                    placeholder="Admin access token"
                     className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
                   />
                   <button
