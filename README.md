@@ -58,12 +58,17 @@ npm run dev
 ### Production Deployment
 
 1. **Cloudflare Pages (Frontend):** Connected to GitHub repo branch `main`. Automatically builds and deploys Next.js export to `https://agriquant-kenya.pages.dev`.
-2. **Cloudflare Python Worker (Backend API):**
+2. **Cloudflare Python Worker (Backend API):** Configure secrets separately from tracked `wrangler.toml`; never add secret values under `[vars]`.
    ```bash
    cd api-worker
+   npx wrangler secret put WEATHER_API_KEY
+   npx wrangler secret put GEMINI_API_KEY
+   npx wrangler secret put ADMIN_TOKEN
    npx wrangler deploy
    # Deploys serverless Python worker to https://agriquant-api.emryspaul7.workers.dev
    ```
+   Use unique, high-entropy values for `ADMIN_TOKEN`; the deployed frontend's feedback admin prompt sends it as an `Authorization: Bearer` header. Rotate the previously committed WeatherAPI key before deploying. Add Cloudflare edge rate-limit rules for `POST /api/comments`, `/api/chat`, and `/api/advice` before opening the service to broad public use; rate limits are account/zone configuration and are not provisioned by this repository.
+3. **CORS:** Worker responses allow only `https://agriquant-kenya.pages.dev`. FastAPI uses that origin by default; local origins are allowed only when `APP_ENV=development`, or can be set explicitly with `ALLOWED_ORIGINS`.
 
 ## API Endpoints
 
@@ -75,7 +80,7 @@ npm run dev
 | `/api/analysis/{crop}` | GET | Spatial arbitrage engine, national median spreads, volatility, best buy/sell hubs |
 | `/api/advice` | POST | AI-generated farming advisory (English / Swahili) |
 | `/api/chat` | POST | Conversational AI chatbot grounded in live dashboard data |
-| `/api/comments` | POST / GET | User feedback submission and authenticated admin retrieval |
+| `/api/comments` | POST / GET | Public bounded feedback submission; GET requires `Authorization: Bearer <ADMIN_TOKEN>` |
 
 ## Supported Crops
 

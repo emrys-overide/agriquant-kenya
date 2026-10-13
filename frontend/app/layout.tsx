@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "kilimo.hub@ke - Smart Farming Dashboard",
-  description: "Live weather, market prices, and AI-powered farming advice for Kenyan farmers",
+  title: "Agriquant | Kilimo Hub",
+  description: "A clear, trusted farming dashboard for live Kenyan weather, market prices, crop insights, and practical advice.",
 };
 
 export default function RootLayout({

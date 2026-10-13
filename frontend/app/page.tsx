@@ -390,7 +390,7 @@ export default function Dashboard() {
     setAdminLoading(true);
     try {
       const res = await axios.get(`${API_URL}/comments`, {
-        params: { password: adminPass },
+        headers: { Authorization: `Bearer ${adminPass}` },
       });
       if (res.data?.authorized) {
         setAdminAuthed(true);
@@ -577,9 +577,9 @@ export default function Dashboard() {
   /* ================================================================ */
 
   return (
-    <div className="relative min-h-screen overflow-hidden overflow-x-hidden bg-gray-950 font-sans text-gray-100">
+    <div className="agri-shell relative min-h-screen overflow-hidden overflow-x-hidden font-sans">
       {/* Layered background */}
-      <div className="pointer-events-none fixed inset-0 z-0">
+      <div className="agri-atmosphere pointer-events-none fixed inset-0 z-0">
         <img
           src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=60"
           alt=""
@@ -595,17 +595,17 @@ export default function Dashboard() {
         {/* ============================================================== */}
         {/*  HEADER                                                         */}
         {/* ============================================================== */}
-        <header className="sticky top-0 z-30 border-b border-white/5 bg-gray-950/70 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:px-6 py-4 md:flex-row">
+        <header className="agri-header sticky top-0 z-30 border-b backdrop-blur-xl">
+          <div className="agri-header-inner mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:px-6 py-4 lg:flex-row">
             {/* Logo + Live badge */}
             <div className="flex items-center gap-3">
-              <button onClick={handleLogoClick} className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 transition hover:bg-emerald-500/20 cursor-pointer">
+              <button onClick={handleLogoClick} className="agri-mark flex h-10 w-10 items-center justify-center rounded-xl transition cursor-pointer">
                 <Leaf className="h-6 w-6 text-emerald-400" />
               </button>
-              <h1 className="text-xl font-bold tracking-tight text-white">
+              <h1 className="agri-wordmark text-xl font-bold tracking-tight">
                 kilimo.hub<span className="text-emerald-400">@ke</span>
               </h1>
-              <span className="flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400">
+              <span className="agri-live flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -615,7 +615,7 @@ export default function Dashboard() {
             </div>
 
             {/* Controls row */}
-            <div className="flex w-full flex-col items-center gap-3 sm:flex-row md:w-auto">
+            <div className="agri-controls flex w-full flex-col items-center gap-3 sm:flex-row md:w-auto">
               {/* Language toggle */}
               <button
                 onClick={toggleLang}
@@ -685,7 +685,7 @@ export default function Dashboard() {
         </header>
 
         {/* Hero Banner */}
-        <div className="relative overflow-hidden">
+        <div className="agri-hero relative overflow-hidden">
           <div className="absolute inset-0 z-0">
             <img
               src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=80"
@@ -695,7 +695,7 @@ export default function Dashboard() {
             <div className="absolute inset-0 bg-gradient-to-b from-gray-950/20 via-gray-950/40 to-gray-950" />
             <div className="absolute inset-0 bg-gradient-to-r from-amber-900/10 via-transparent to-emerald-900/10" />
           </div>
-          <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 md:py-32 text-center">
+          <div className="agri-hero-content relative z-10 mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 md:py-32 text-center">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 mb-5 backdrop-blur-sm">
               <Sprout className="h-3.5 w-3.5 text-emerald-400" />
               <span className="text-xs font-medium text-emerald-300">
@@ -704,7 +704,7 @@ export default function Dashboard() {
             </div>
             <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-5 tracking-tight leading-tight">
               Smart Farming,{" "}
-              <span className="bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300 bg-clip-text text-transparent">
+              <span className="agri-hero-accent">
                 Smarter Decisions
               </span>
             </h2>
@@ -721,7 +721,7 @@ export default function Dashboard() {
         {/* ============================================================== */}
         {/*  MAIN CONTENT                                                   */}
         {/* ============================================================== */}
-        <main className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
+        <main className="agri-main mx-auto max-w-7xl px-4 sm:px-6 py-8">
           {/* Error */}
           {error && (
             <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300 backdrop-blur-xl">
@@ -732,18 +732,30 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Initial loading */}
+          {/* Initial loading: show structure only, never fabricated readings */}
           {loading && !weather && !prices ? (
-            <div className="flex h-64 items-center justify-center">
-              <div className="flex flex-col items-center gap-4">
-                <div className="relative">
-                  <div className="h-16 w-16 rounded-full border-2 border-emerald-500/20" />
-                  <Loader2 className="absolute inset-0 m-auto h-10 w-10 animate-spin text-emerald-500" />
+            <div className="agri-loading" aria-busy="true" aria-live="polite">
+              <div className="agri-loading-heading">
+                <div className="agri-loading-spinner"><Loader2 className="h-5 w-5 animate-spin" /></div>
+                <div>
+                  <p className="agri-loading-title">{lang === "sw" ? "Tunaandaa taarifa za shamba lako" : "Preparing your farm outlook"}</p>
+                  <p className="agri-loading-copy">{lang === "sw" ? "Tunatafuta hali ya hewa, bei na ushauri wa mazao." : "Gathering weather, market and crop signals for your location."}</p>
                 </div>
-                <div className="text-center">
-                  <p className="text-sm font-medium text-gray-400">{t("analyzingData", lang)}</p>
-                  <p className="text-xs text-gray-600 mt-1">KAMIS + Mkulima Online</p>
-                </div>
+                <span className="agri-sync-pill"><span />{lang === "sw" ? "Inasawazisha" : "Syncing data"}</span>
+              </div>
+              <div className="agri-loading-grid">
+                {[
+                  { label: lang === "sw" ? "Hali ya hewa" : "Field conditions", icon: <Cloud className="h-4 w-4" /> },
+                  { label: lang === "sw" ? "Bei za soko" : "Market prices", icon: <BarChartIcon className="h-4 w-4" /> },
+                  { label: lang === "sw" ? "Ushauri wa zao" : "Crop advisory", icon: <Sprout className="h-4 w-4" /> },
+                ].map((tile) => (
+                  <div className="agri-loading-card" key={tile.label}>
+                    <div className="agri-loading-card-title"><span>{tile.icon}</span>{tile.label}</div>
+                    <div className="agri-skeleton agri-skeleton-primary" />
+                    <div className="agri-skeleton agri-skeleton-secondary" />
+                    <div className="agri-skeleton agri-skeleton-tertiary" />
+                  </div>
+                ))}
               </div>
             </div>
           ) : (
@@ -1406,7 +1418,7 @@ export default function Dashboard() {
         {/* ================================================================ */}
         {/*  FEEDBACK SECTION                                                 */}
         {/* ================================================================ */}
-        <section className="relative overflow-hidden">
+        <section className="agri-feedback relative overflow-hidden">
           <div className="absolute inset-0 z-0">
             <img
               src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1920&q=60"
@@ -1511,7 +1523,7 @@ export default function Dashboard() {
         </section>
 
         {/* Footer */}
-        <footer className="relative mt-0 overflow-hidden">
+        <footer className="agri-footer relative mt-0 overflow-hidden">
           <div className="absolute inset-0 z-0">
             <img
               src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=1200&q=60"
@@ -1560,7 +1572,7 @@ export default function Dashboard() {
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setChatOpen(false)} />
 
           {/* Panel */}
-          <div className="relative flex h-full w-full max-w-full sm:max-w-[400px] flex-col border-l border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-xl">
+          <div className="agri-chat-panel relative flex h-full w-full max-w-full sm:max-w-[400px] flex-col border-l shadow-2xl backdrop-blur-xl">
             {/* Chat Header */}
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div className="flex items-center gap-2">
@@ -1645,7 +1657,7 @@ export default function Dashboard() {
       {adminOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAdminOpen(false)} />
-          <div className="relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-white/10 bg-gray-950/95 shadow-2xl backdrop-blur-xl mx-4">
+          <div className="agri-admin-panel relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border shadow-2xl backdrop-blur-xl mx-4">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
               <div className="flex items-center gap-2">
@@ -1663,14 +1675,14 @@ export default function Dashboard() {
             {/* Auth gate */}
             {!adminAuthed ? (
               <div className="p-6">
-                <p className="text-xs text-gray-500 mb-3">Enter the admin password to view feedback.</p>
+                <p className="text-xs text-gray-500 mb-3">Enter the admin access token to view feedback.</p>
                 <div className="flex gap-2">
                   <input
                     type="password"
                     value={adminPass}
                     onChange={(e) => setAdminPass(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") fetchComments(); }}
-                    placeholder="Admin password"
+                    placeholder="Admin access token"
                     className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
                   />
                   <button

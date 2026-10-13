@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import os
@@ -9,20 +9,36 @@ from bs4 import BeautifulSoup
 import random
 import urllib3
 import json
+import hmac
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = FastAPI(title="Kenya Agri-Predict Dashboard API")
 
+@app.middleware("http")
+async def enforce_request_size(request, call_next):
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > 32_768:
+                return JSONResponse({"detail": "Request body too large."}, status_code=413)
+        except ValueError:
+            return JSONResponse({"detail": "Invalid Content-Length."}, status_code=400)
+    return await call_next(request)
+
+_default_origins = ["https://agriquant-kenya.pages.dev"]
+if os.environ.get("APP_ENV", "production").lower() in {"development", "dev", "test"}:
+    _default_origins += ["http://localhost:3000", "http://127.0.0.1:3000"]
+ALLOWED_ORIGINS = [origin.strip() for origin in os.environ.get("ALLOWED_ORIGINS", ",".join(_default_origins)).split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
-
 # --- CONFIGURATION ---
-WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY", "7bb7778e1e2b4ec5a7050654260506")
+WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY", "")
+ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini")  # configurable for future providers
 
@@ -164,7 +180,7 @@ async def api_info():
             "advice": "POST /api/advice",
             "chat": "POST /api/chat",
             "submit_feedback": "POST /api/comments",
-            "get_feedback": "GET /api/comments?password=<admin_password>",
+            "get_feedback": "GET /api/comments (admin bearer authentication required)",
         },
         "data_sources": [
             "KAMIS (kamis.kilimo.go.ke) — Kenya Agricultural Market Information System",
@@ -179,7 +195,9 @@ async def api_info():
 # ==========================================
 @app.get("/api/weather/{location}")
 async def get_live_weather(location: str):
-    url = "http://api.weatherapi.com/v1/forecast.json"
+    if not WEATHER_API_KEY:
+        raise HTTPException(status_code=503, detail="Weather service is not configured.")
+    url = "https://api.weatherapi.com/v1/forecast.json"
     params = {
         "key": WEATHER_API_KEY,
         "q": location + ", Kenya",
@@ -1055,6 +1073,12 @@ async def generate_farmer_advice(payload: dict):
     weather = payload.get("weather", {})
     prices = payload.get("prices", {})
     lang = payload.get("lang", "en")
+    if not isinstance(messages, list) or len(messages) > 20 or not isinstance(context, dict):
+        raise HTTPException(status_code=400, detail="Invalid chat payload.")
+    if lang not in {"en", "sw"}:
+        raise HTTPException(status_code=400, detail="Unsupported language.")
+    if any(not isinstance(msg, dict) or not isinstance(msg.get("content", ""), str) or len(msg.get("content", "")) > 4000 for msg in messages):
+        raise HTTPException(status_code=400, detail="Chat message is invalid or too long.")
     crop = prices.get("crop", "Your crop")
     location = weather.get("location", "your area")
 
@@ -1303,10 +1327,7 @@ async def gemini_chat(payload: dict):
         gemini_role = "user" if role == "user" else "model"
         contents.append({"role": gemini_role, "parts": [{"text": content}]})
 
-    gemini_url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
-    )
+    gemini_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
     gemini_body = {
         "contents": contents,
         "generationConfig": {
@@ -1317,11 +1338,11 @@ async def gemini_chat(payload: dict):
 
     async with httpx.AsyncClient() as client:
         try:
-            resp = await client.post(gemini_url, json=gemini_body, timeout=30.0)
+            resp = await client.post(gemini_url, json=gemini_body, headers={"x-goog-api-key": GEMINI_API_KEY}, timeout=30.0)
             resp.raise_for_status()
             result = resp.json()
         except httpx.HTTPStatusError as e:
-            error_detail = e.response.text if e.response else str(e)
+            error_detail = "upstream service returned an error"
             raise HTTPException(
                 status_code=502,
                 detail=f"Gemini API returned an error: {error_detail}"
@@ -1329,7 +1350,7 @@ async def gemini_chat(payload: dict):
         except Exception as e:
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to reach Gemini API: {str(e)}"
+                detail="AI provider is temporarily unavailable."
             )
 
     # Extract the reply text from Gemini response
@@ -1347,7 +1368,7 @@ async def gemini_chat(payload: dict):
 import uuid
 
 COMMENTS_FILE = os.path.join(os.path.dirname(__file__), "comments.json")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "agriquant2026")
+MAX_COMMENTS = 500
 
 
 def _load_comments() -> list:
@@ -1365,38 +1386,33 @@ def _save_comments(comments: list):
 
 @app.post("/api/comments")
 async def submit_comment(data: dict):
-    """Submit feedback/comment from the dashboard."""
-    name = (data.get("name") or "").strip()
-    email = (data.get("email") or "").strip()
-    message = (data.get("message") or "").strip()
+    """Submit bounded feedback from the dashboard."""
+    name, email, message = data.get("name") or "", data.get("email") or "", data.get("message") or ""
     rating = data.get("rating", 0)
-
+    if not all(isinstance(value, str) for value in (name, email, message)):
+        raise HTTPException(status_code=400, detail="Feedback fields must be strings.")
+    name, email, message = name.strip(), email.strip(), message.strip()
     if not name or not message:
         raise HTTPException(status_code=400, detail="Name and message are required.")
-
+    if len(name) > 100 or len(email) > 200 or len(message) > 2000:
+        raise HTTPException(status_code=400, detail="Feedback fields exceed the allowed length.")
+    if not isinstance(rating, (int, float)) or isinstance(rating, bool) or not 0 <= rating <= 5:
+        raise HTTPException(status_code=400, detail="Rating must be a number between 0 and 5.")
     comments = _load_comments()
-    comment = {
-        "id": str(uuid.uuid4())[:8],
-        "name": name,
-        "email": email,
-        "message": message,
-        "rating": rating,
-        "timestamp": datetime.now().isoformat(),
-    }
-    comments.insert(0, comment)  # newest first
-    _save_comments(comments)
+    comment = {"id": str(uuid.uuid4())[:8], "name": name, "email": email,
+               "message": message, "rating": int(rating), "timestamp": datetime.now().isoformat()}
+    comments.insert(0, comment)
+    _save_comments(comments[:MAX_COMMENTS])
     return {"success": True, "id": comment["id"]}
-
-
 @app.get("/api/comments")
-async def get_comments(password: str = ""):
-    """Retrieve all comments (admin only, password-protected)."""
-    if password != ADMIN_PASSWORD:
-        return {"authorized": False, "comments": []}
-    comments = _load_comments()
-    return {"authorized": True, "comments": comments}
-
-
+async def get_comments(authorization: str | None = Header(default=None)):
+    """Retrieve feedback using a server-side bearer token; credentials never belong in URLs."""
+    if not ADMIN_TOKEN:
+        raise HTTPException(status_code=503, detail="Feedback administration is not configured.")
+    supplied = authorization[7:].strip() if authorization and authorization.startswith("Bearer ") else ""
+    if not hmac.compare_digest(supplied, ADMIN_TOKEN):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    return {"authorized": True, "comments": _load_comments()[:MAX_COMMENTS]}
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

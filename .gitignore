@@ -40,3 +40,6 @@ desktop.ini
 ~$*
 frontend_scaffold_tmp/
 price_cache.json
+.env.*
+!.env.example
+comments.json
