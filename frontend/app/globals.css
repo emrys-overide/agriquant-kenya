@@ -1,25 +1,131 @@
 @import "tailwindcss";
 
-:root {
-  --bg-base: #0a0f0d;
-  --bg-card: rgba(18, 28, 23, 0.75);
-  --bg-card-hover: rgba(24, 38, 31, 0.9);
-  --border-subtle: rgba(46, 117, 89, 0.2);
-  --border-accent: rgba(52, 211, 153, 0.4);
-  --accent-emerald: #10b981;
-  --accent-emerald-glow: rgba(16, 185, 129, 0.15);
-  --accent-amber: #f59e0b;
-  --accent-cyan: #06b6d4;
-  --accent-violet: #8b5cf6;
-  --text-main: #f3fbf7;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+/* ==========================================================================
+   Theme Factory Design Tokens
+   Cohesive WCAG-verified color palettes + Display / Body / Mono typography
+   ========================================================================== */
+
+:root,
+[data-theme="golden-hour"] {
+  --tf-bg: #fbf8f3;
+  --tf-bg-elevated: #ffffff;
+  --tf-bg-subtle: #f3ede2;
+  --tf-bg-accent-soft: #f9ebe4;
+  --tf-bg-secondary-soft: #e6f2ec;
+  --tf-bg-warning-soft: #fdf2df;
+
+  --tf-ink: #1c1815;
+  --tf-ink-secondary: #534940;
+  --tf-ink-muted: #786c61;
+  --tf-ink-on-primary: #fffdf9;
+
+  --tf-border: #e5dccf;
+  --tf-border-strong: #cfc2b0;
+
+  --tf-primary: #c85a32;       /* Kenyan Terracotta */
+  --tf-primary-hover: #ae4924;
+  --tf-secondary: #2e6f52;     /* Highland Sage */
+  --tf-tertiary: #d98a2b;      /* Sunlit Ochre */
+  --tf-danger: #c43d32;
+
+  --tf-shadow-sm: 0 1px 2px rgba(28, 24, 21, 0.05);
+  --tf-shadow-md: 0 10px 30px -12px rgba(28, 24, 21, 0.12);
+  --tf-shadow-lg: 0 24px 48px -16px rgba(28, 24, 21, 0.18);
+  --tf-pattern: radial-gradient(rgba(200, 90, 50, 0.06) 1px, transparent 1px);
+  --tf-hero-glow: radial-gradient(60% 80% at 85% 0%, rgba(217, 138, 43, 0.14), transparent 70%);
+}
+
+[data-theme="modern-minimalist"] {
+  --tf-bg: #f8fafc;
+  --tf-bg-elevated: #ffffff;
+  --tf-bg-subtle: #f1f5f9;
+  --tf-bg-accent-soft: #eff6ff;
+  --tf-bg-secondary-soft: #f0fdfa;
+  --tf-bg-warning-soft: #fffbeb;
+
+  --tf-ink: #0f172a;
+  --tf-ink-secondary: #334155;
+  --tf-ink-muted: #64748b;
+  --tf-ink-on-primary: #ffffff;
+
+  --tf-border: #e2e8f0;
+  --tf-border-strong: #cbd5e1;
+
+  --tf-primary: #2563eb;       /* Swiss Cobalt */
+  --tf-primary-hover: #1d4ed8;
+  --tf-secondary: #0d9488;     /* Editorial Teal */
+  --tf-tertiary: #d97706;      /* Amber */
+  --tf-danger: #dc2626;
+
+  --tf-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --tf-shadow-md: 0 8px 24px -10px rgba(15, 23, 42, 0.09);
+  --tf-shadow-lg: 0 20px 44px -14px rgba(15, 23, 42, 0.14);
+  --tf-pattern: radial-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px);
+  --tf-hero-glow: radial-gradient(60% 80% at 85% 0%, rgba(37, 99, 235, 0.09), transparent 70%);
+}
+
+[data-theme="ocean-depths"] {
+  --tf-bg: #081220;
+  --tf-bg-elevated: #0f1f36;
+  --tf-bg-subtle: #142845;
+  --tf-bg-accent-soft: rgba(45, 212, 191, 0.14);
+  --tf-bg-secondary-soft: rgba(56, 189, 248, 0.14);
+  --tf-bg-warning-soft: rgba(251, 113, 133, 0.14);
+
+  --tf-ink: #f1f5f9;
+  --tf-ink-secondary: #cbd5e1;
+  --tf-ink-muted: #8aa0bc;
+  --tf-ink-on-primary: #062126;
+
+  --tf-border: #1e3554;
+  --tf-border-strong: #2c4b75;
+
+  --tf-primary: #2dd4bf;       /* Seafoam Teal */
+  --tf-primary-hover: #14b8a6;
+  --tf-secondary: #38bdf8;     /* Coastal Sky */
+  --tf-tertiary: #fbbf24;      /* Lantern Gold */
+  --tf-danger: #fb7185;
+
+  --tf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --tf-shadow-md: 0 12px 32px -10px rgba(0, 0, 0, 0.48);
+  --tf-shadow-lg: 0 24px 56px -14px rgba(0, 0, 0, 0.65);
+  --tf-pattern: radial-gradient(rgba(45, 212, 191, 0.08) 1px, transparent 1px);
+  --tf-hero-glow: radial-gradient(60% 80% at 85% 0%, rgba(45, 212, 191, 0.14), transparent 70%);
+}
+
+[data-theme="midnight-galaxy"] {
+  --tf-bg: #0b091a;
+  --tf-bg-elevated: #14102b;
+  --tf-bg-subtle: #1d173d;
+  --tf-bg-accent-soft: rgba(167, 139, 250, 0.15);
+  --tf-bg-secondary-soft: rgba(52, 211, 153, 0.14);
+  --tf-bg-warning-soft: rgba(251, 191, 36, 0.14);
+
+  --tf-ink: #f8fafc;
+  --tf-ink-secondary: #d4d0eb;
+  --tf-ink-muted: #9891be;
+  --tf-ink-on-primary: #130b2e;
+
+  --tf-border: #2a2252;
+  --tf-border-strong: #3d3275;
+
+  --tf-primary: #a78bfa;       /* Amethyst */
+  --tf-primary-hover: #c4b5fd;
+  --tf-secondary: #34d399;     /* Aurora Mint */
+  --tf-tertiary: #fbbf24;      /* Solar Gold */
+  --tf-danger: #f87171;
+
+  --tf-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --tf-shadow-md: 0 12px 32px -10px rgba(0, 0, 0, 0.55);
+  --tf-shadow-lg: 0 24px 56px -14px rgba(0, 0, 0, 0.72);
+  --tf-pattern: radial-gradient(rgba(167, 139, 250, 0.09) 1px, transparent 1px);
+  --tf-hero-glow: radial-gradient(60% 80% at 85% 0%, rgba(167, 139, 250, 0.18), transparent 70%);
 }
 
 @theme inline {
-  --color-background: var(--bg-base);
-  --color-foreground: var(--text-main);
-  --font-sans: var(--font-geist-sans);
+  --font-display: var(--font-display), Georgia, serif;
+  --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
 * {
@@ -28,83 +134,116 @@
 
 html {
   scroll-behavior: smooth;
-  background: var(--bg-base);
+  background-color: var(--tf-bg);
+  color: var(--tf-ink);
 }
 
 body {
   min-height: 100vh;
-  background: var(--bg-base);
-  color: var(--text-main);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--tf-bg);
+  color: var(--tf-ink);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-/* Glassmorphism modern cards */
-.glass-panel {
-  background: var(--bg-card);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-subtle);
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+}
+
+.font-tabular {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Editorial Bento Surfaces */
+.tf-canvas {
+  background-color: var(--tf-bg);
+  background-image: var(--tf-hero-glow), var(--tf-pattern);
+  background-size: 100% 100%, 24px 24px;
+  color: var(--tf-ink);
+}
+
+.tf-card {
+  background-color: var(--tf-bg-elevated);
+  border: 1px solid var(--tf-border);
   border-radius: 1.25rem;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--tf-shadow-sm);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.glass-panel:hover {
-  border-color: var(--border-accent);
-  box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.5), 0 0 24px -2px var(--accent-emerald-glow);
+.tf-card-interactive:hover {
+  border-color: var(--tf-border-strong);
+  box-shadow: var(--tf-shadow-md);
 }
 
-.glass-input {
-  background: rgba(10, 20, 16, 0.6);
-  border: 1px solid rgba(46, 117, 89, 0.3);
-  color: #fff;
-  transition: all 0.2s ease;
+.tf-subtle-box {
+  background-color: var(--tf-bg-subtle);
+  border: 1px solid var(--tf-border);
+  border-radius: 0.9rem;
 }
 
-.glass-input:focus {
-  border-color: #10b981;
+.tf-input {
+  background-color: var(--tf-bg-elevated);
+  border: 1px solid var(--tf-border-strong);
+  color: var(--tf-ink);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.tf-input::placeholder {
+  color: var(--tf-ink-muted);
+}
+
+.tf-input:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  border-color: var(--tf-primary);
+  box-shadow: 0 0 0 3px var(--tf-bg-accent-soft);
 }
 
-/* Kenyan Flag Inspired Accent Glow */
-.kenya-gradient-line {
-  height: 2px;
-  background: linear-gradient(90deg, #10b981 0%, #ef4444 33%, #10b981 66%, #06b6d4 100%);
+.tf-btn-primary {
+  background-color: var(--tf-primary);
+  color: var(--tf-ink-on-primary);
+  transition: background-color 0.18s ease, transform 0.15s ease, box-shadow 0.18s ease;
+}
+
+.tf-btn-primary:hover:not(:disabled) {
+  background-color: var(--tf-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--tf-shadow-md);
+}
+
+.tf-btn-ghost {
+  background-color: var(--tf-bg-subtle);
+  color: var(--tf-ink-secondary);
+  border: 1px solid var(--tf-border);
+  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.tf-btn-ghost:hover:not(:disabled) {
+  border-color: var(--tf-border-strong);
+  color: var(--tf-ink);
+}
+
+/* Range slider themed */
+input[type="range"].tf-slider {
+  accent-color: var(--tf-primary);
 }
 
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
 }
+
 ::-webkit-scrollbar-track {
-  background: #0a0f0d;
+  background: var(--tf-bg);
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #2e4a3b;
+  background: var(--tf-border-strong);
   border-radius: 9999px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #10b981;
-}
-
-/* Animations */
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.02); }
-}
-
-.animate-pulse-subtle {
-  animation: pulse-subtle 4s ease-in-out infinite;
-}
-
-@keyframes grid-drift {
-  0% { background-position: 0 0; }
-  100% { background-position: 40px 40px; }
-}
-
-.bg-grid-pattern {
-  background-image: radial-gradient(rgba(16, 185, 129, 0.08) 1px, transparent 1px);
-  background-size: 28px 28px;
+  background: var(--tf-primary);
 }
