@@ -1,6 +1,9 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, Index
-from datetime import datetime
+from datetime import datetime, timezone
 from backend.app.db.session import Base
+
+def utc_now():
+    return datetime.now(timezone.utc)
 
 class CropSummary(Base):
     __tablename__ = "crop_summaries"
@@ -14,7 +17,7 @@ class CropSummary(Base):
     profit_margin_estimate = Column(Float, default=0.0)
     data_status = Column(String(255), nullable=False)
     has_data = Column(Boolean, default=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, index=True)
 
 
 class MarketPrice(Base):
@@ -29,7 +32,7 @@ class MarketPrice(Base):
     date = Column(String(50), nullable=True)
     is_key_market = Column(Boolean, default=False)
     sources = Column(Text, nullable=True)  # JSON-encoded array or comma-separated
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now, index=True)
 
     __table_args__ = (
         Index("ix_crop_market", "crop", "market", unique=True),
@@ -51,7 +54,7 @@ class WeatherSnapshot(Base):
     soil_moisture_status = Column(String(100), nullable=True)
     forecast_json = Column(Text, nullable=True)
     risk_alerts_json = Column(Text, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class UserFeedback(Base):
@@ -62,4 +65,4 @@ class UserFeedback(Base):
     email = Column(String(150), nullable=True)
     message = Column(Text, nullable=False)
     rating = Column(Integer, default=5)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now, index=True)
