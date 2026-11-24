@@ -1,0 +1,8 @@
+{
+  "name": "agriquant-kenya",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix frontend run build && node -e \"const fs=require('fs'); fs.cpSync('frontend/out', 'out', {recursive:true});\""
+  }
+}
