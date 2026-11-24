@@ -78,8 +78,8 @@ class SecurityRegressionTests(unittest.TestCase):
         self.assertNotIn("access-control-allow-credentials", allowed.headers)
 
     def test_worker_and_deployment_config_have_no_known_secret_defaults(self):
-        worker = Path("api-worker/src/index.py").read_text()
-        config = Path("api-worker/wrangler.toml").read_text()
+        worker = Path("api-worker/src/index.py").read_text(encoding="utf-8")
+        config = Path("api-worker/wrangler.toml").read_text(encoding="utf-8")
         self.assertNotIn("7bb7778e1e2b4ec5a7050654260506", worker + config)
         self.assertNotIn("agriquant2026", worker + config)
         self.assertNotIn('"Access-Control-Allow-Origin", "*"', worker)
