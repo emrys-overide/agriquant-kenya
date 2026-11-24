@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: agriquant-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: agriquant_user
+      POSTGRES_PASSWORD: agriquant_password
+      POSTGRES_DB: agriquant
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agriquant-api
+    restart: always
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://agriquant_user:agriquant_password@db:5432/agriquant
+      WEATHER_API_KEY: ${WEATHER_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      ALLOWED_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,https://agriquant-kenya.pages.dev"
+
+volumes:
+  pgdata:

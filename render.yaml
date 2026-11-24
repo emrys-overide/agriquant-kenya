@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: agriquant-api
+    runtime: python
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: agriquant-db
+          property: connectionString
+      - key: WEATHER_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: "https://agriquant-kenya.pages.dev"
+
+databases:
+  - name: agriquant-db
+    databaseName: agriquant
+    user: agriquant_user
+    plan: free

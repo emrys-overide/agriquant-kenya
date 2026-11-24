@@ -43,3 +43,7 @@ price_cache.json
 .env.*
 !.env.example
 comments.json
+
+agriquant.db
+*.db
+
