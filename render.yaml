@@ -1,4 +1,17 @@
 services:
+  - type: static
+    name: agriquant-kenya
+    buildCommand: "npm --prefix frontend install && npm --prefix frontend run build"
+    publishPath: "frontend/out"
+    routes:
+      - type: rewrite
+        source: "/*"
+        destination: "/index.html"
+    headers:
+      - path: "/*"
+        name: "Cache-Control"
+        value: "public, max-age=0, must-revalidate"
+
   - type: web
     name: agriquant-api
     runtime: python
@@ -18,7 +31,7 @@ services:
       - key: ADMIN_TOKEN
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: "https://agriquant-kenya.pages.dev"
+        value: "https://agriquant-kenya.pages.dev,https://agriquant-kenya.onrender.com"
 
 databases:
   - name: agriquant-db
