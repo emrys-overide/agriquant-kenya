@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, useMemo, type ChangeEvent, type FormEvent } from "react";
 import axios from "axios";
 import {
   AlertTriangle,
-  BarChart as BarChartIcon,
+  BarChart3,
   Cloud,
   Leaf,
   Loader2,
@@ -21,18 +21,22 @@ import {
   Thermometer,
   Sprout,
   MapPin,
-  Navigation,
   ArrowUpRight,
   ArrowDownRight,
   Minus,
   Crosshair,
-  BarChart3,
   Database,
   ShoppingCart,
-  Wheat,
   Lock,
   CheckCircle,
   User,
+  Calculator,
+  Search,
+  ChevronRight,
+  TrendingDown,
+  Layers,
+  Sparkles,
+  Info,
 } from "lucide-react";
 import {
   Area,
@@ -183,123 +187,79 @@ type ChatMessage = {
 /* ------------------------------------------------------------------ */
 
 const translations: Record<string, { en: string; sw: string }> = {
-  liveData: { en: "Live Data", sw: "Data Hai" },
-  liveWeather: { en: "Live Weather", sw: "Hali ya Hewa" },
-  humidity: { en: "Humidity", sw: "Unyevu" },
-  soilMoistureEst: { en: "Soil Moisture (Open-Meteo)", sw: "Unyevu wa Udongo (Open-Meteo)" },
-  agriculturalRisks: { en: "Agricultural Risks", sw: "Hatari za Kilimo" },
-  marketIntelligence: { en: "Market Intelligence", sw: "Taarifa za Soko" },
+  liveData: { en: "Live Data Feed", sw: "Mtandao wa Data Hai" },
+  liveWeather: { en: "Satellite & Weather Telemetry", sw: "Hali ya Anga na Satellite" },
+  humidity: { en: "Humidity", sw: "Unyevu wa Hewa" },
+  soilMoistureEst: { en: "Soil Saturation (Open-Meteo)", sw: "Unyevu wa Udongo (Open-Meteo)" },
+  agriculturalRisks: { en: "Agronomic Risk Alerts", sw: "Tahadhari za Hatari za Kilimo" },
+  marketIntelligence: { en: "National Benchmark Prices", sw: "Bei za Kitaifa" },
   farmGate: { en: "Farm Gate", sw: "Bei Shambani" },
   wholesale: { en: "Wholesale", sw: "Jumla" },
   retail: { en: "Retail", sw: "Rejareja" },
-  forecast14: { en: "14-Day Forecast", sw: "Utabiri wa Siku 14" },
+  forecast14: { en: "14-Day Weather & Rain Outlook", sw: "Utabiri wa Siku 14" },
   maxTemp: { en: "Max Temp", sw: "Joto la Juu" },
   minTemp: { en: "Min Temp", sw: "Joto la Chini" },
-  rain: { en: "Rain", sw: "Mvua" },
-  smartAdvisory: { en: "Smart Advisory Report", sw: "Taarifa ya Ushauri" },
-  analyzingData: { en: "Analyzing data...", sw: "Inachambua data..." },
-  chatTitle: { en: "Ask Mkulima AI", sw: "Uliza Mkulima AI" },
-  chatPlaceholder: { en: "Type your question...", sw: "Andika swali lako..." },
+  rain: { en: "Precipitation", sw: "Kiwango cha Mvua" },
+  smartAdvisory: { en: "Agronomic AI Intelligence", sw: "Ripoti ya Ushauri wa AI" },
+  analyzingData: { en: "Synthesizing market telemetry...", sw: "Inachambua data ya masoko..." },
+  chatTitle: { en: "Mkulima Copilot", sw: "Msaidizi wa Mkulima" },
+  chatPlaceholder: { en: "Ask about crop diseases, market prices, or soil...", sw: "Uliza kuhusu masoko, magonjwa, au udongo..." },
   send: { en: "Send", sw: "Tuma" },
-  footerCredits: {
-    en: "Data Sources: KAMIS (kamis.kilimo.go.ke), Mkulima Online, WeatherAPI & Open-Meteo. Built for Kenyan Farmers.",
-    sw: "Vyanzo vya Data: KAMIS (kamis.kilimo.go.ke), Mkulima Online, WeatherAPI na Open-Meteo. Imetengenezwa kwa Wakulima wa Kenya.",
-  },
-  ok: { en: "OK", sw: "Sawa" },
-  fetching: { en: "Fetching...", sw: "Inapakia..." },
-  locationPlaceholder: { en: "Enter Location...", sw: "Weka eneo..." },
-  wind: { en: "Wind", sw: "Upepo" },
-  waitingWeather: { en: "Waiting for weather data", sw: "Inasubiri data ya hali ya hewa" },
+  ok: { en: "Apply", sw: "Sasisha" },
+  fetching: { en: "Updating...", sw: "Inapakia..." },
+  locationPlaceholder: { en: "County or town (e.g. Kitale, Nakuru)...", sw: "Kaunti au mji (mfano Kitale, Nakuru)..." },
+  wind: { en: "Wind Speed", sw: "Kasi ya Upepo" },
+  waitingWeather: { en: "Acquiring telemetry...", sw: "Inasubiri data ya hali ya hewa" },
   unavailable: { en: "Unavailable", sw: "Haipatikani" },
-  liveFromKamis: { en: "Live from KAMIS", sw: "Data hai kutoka KAMIS" },
-  estimated: { en: "Verified Snapshot", sw: "Kumbukumbu Halisi" },
-  errorBackend: {
-    en: "Could not reach the API server. Please check your internet connection and try again.",
-    sw: "Haikuweza kufikia seva ya API. Tafadhali angalia muunganisho wako wa intaneti na jaribu tena.",
-  },
-  chatGreeting: {
-    en: "Hello! I'm Mkulima AI. Ask me anything about farming, weather, or market prices.",
-    sw: "Habari! Mimi ni Mkulima AI. Niulize chochote kuhusu kilimo, hali ya hewa, au bei za soko.",
-  },
-  chatError: {
-    en: "Sorry, I couldn't process that. Please try again.",
-    sw: "Samahani, sikuweza kuchakata hilo. Tafadhali jaribu tena.",
-  },
-  tempRain: { en: "Temp & Rain", sw: "Joto na Mvua" },
-  marketComparison: { en: "Market Price Comparison", sw: "Ulinganisho wa Bei Masokoni" },
-  perKg: { en: "per kg", sw: "kwa kg" },
-  perUnit: { en: "per unit", sw: "kwa kipimo" },
-  analysisPrediction: { en: "Price Analysis & Spatial Arbitrage", sw: "Uchambuzi na Tofauti za Masoko" },
-  bestSellMarket: { en: "Best Market to Sell", sw: "Soko Bora la Kuuza" },
-  cheapestBuy: { en: "Cheapest to Buy", sw: "Rahisi Zaidi Kununua" },
-  priceSpread: { en: "Price Spread", sw: "Tofauti ya Bei" },
-  volatility: { en: "Volatility (CV)", sw: "Kutokuwa Thabiti (CV)" },
-  avgRetail: { en: "Avg Retail", sw: "Wastani Rejareja" },
-  avgWholesale: { en: "Avg Wholesale", sw: "Wastani Jumla" },
-  trend: { en: "Spread vs Nat'l", sw: "Tofauti na Taifa" },
-  predicted: { en: "Nat'l Benchmark", sw: "Kipimo cha Taifa" },
-  benchmark: { en: "National Benchmark Median", sw: "Wastani wa Kitaifa" },
-  soilTemp: { en: "Soil Temp", sw: "Joto la Udongo" },
-  current: { en: "Current", sw: "Sasa" },
-  confidence: { en: "Confidence", sw: "Uhakika" },
-  rising: { en: "Rising", sw: "Inapanda" },
-  falling: { en: "Falling", sw: "Inashuka" },
-  stable: { en: "Stable", sw: "Thabiti" },
-  nearestMarket: { en: "Nearest Market", sw: "Soko la Karibu" },
-  kmAway: { en: "km away", sw: "km mbali" },
-  useMyLocation: { en: "Use My Location", sw: "Tumia Eneo Langu" },
-  detecting: { en: "Detecting...", sw: "Inatafuta..." },
-  market: { en: "Market", sw: "Soko" },
-  keyMarkets: { en: "Key Markets", sw: "Masoko Makuu" },
-  allMarkets: { en: "All Markets", sw: "Masoko Yote" },
-  recommendation: { en: "Recommendation", sw: "Mapendekezo" },
+  soilTemp: { en: "Soil Temp (0cm)", sw: "Joto la Udongo" },
+  arbitrageTitle: { en: "Spatial Arbitrage Matrix", sw: "Fursa za Arbitrage na Tofauti za Masoko" },
+  calculatorTitle: { en: "Profit & Logistics Simulator", sw: "Kikokotoo cha Faida na Usafiri" },
 };
 
 function t(key: string, lang: "en" | "sw"): string {
   return translations[key]?.[lang] ?? key;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Crop options                                                       */
-/* ------------------------------------------------------------------ */
-
-const cropOptions: { value: Crop; label: string }[] = [
-  { value: "maize", label: "Maize (90kg Bag)" },
-  { value: "tomatoes", label: "Tomatoes (Crate)" },
-  { value: "cabbages", label: "Cabbages (Head)" },
-  { value: "onions", label: "Onions (Kg)" },
-  { value: "french_beans", label: "French Beans (Kg)" },
-  { value: "potatoes", label: "Potatoes (50kg Bag - Laikipia)" },
-  { value: "wheat", label: "Wheat (90kg Bag - Laikipia)" },
+const cropOptions: { value: Crop; label: string; unit: string; icon: string }[] = [
+  { value: "maize", label: "Dry Maize", unit: "90kg Bag", icon: "🌽" },
+  { value: "tomatoes", label: "Fresh Tomatoes", unit: "30kg Crate", icon: "🍅" },
+  { value: "potatoes", label: "Irish Potatoes", unit: "50kg Bag", icon: "🥔" },
+  { value: "onions", label: "Red Dry Onions", unit: "1kg Net", icon: "🧅" },
+  { value: "cabbages", label: "Green Cabbages", unit: "Medium Head", icon: "🥬" },
+  { value: "french_beans", label: "French Beans", unit: "1kg Export", icon: "🌱" },
+  { value: "wheat", label: "Clean Wheat", unit: "90kg Bag", icon: "🌾" },
 ];
 
 /* ------------------------------------------------------------------ */
 /*  Custom Tooltip Component                                           */
 /* ------------------------------------------------------------------ */
 
-function DarkTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ name: string; value: number; color: string }>; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800 px-4 py-3 shadow-xl">
-      {label && <p className="mb-1 text-xs font-medium text-gray-400">{label}</p>}
+    <div className="rounded-xl border border-emerald-500/30 bg-[#0f1914] px-4 py-3 shadow-2xl backdrop-blur-md">
+      {label && <p className="mb-1 text-xs font-mono uppercase tracking-wider text-emerald-400">{label}</p>}
       {payload.map((entry, i) => (
-        <p key={i} className="text-sm font-semibold" style={{ color: entry.color }}>
-          {entry.name}: {entry.value}
-        </p>
+        <div key={i} className="flex items-center gap-2 text-xs font-semibold py-0.5">
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+          <span className="text-gray-300">{entry.name}:</span>
+          <span className="text-white font-mono">{typeof entry.value === 'number' ? entry.value.toLocaleString() : entry.value}</span>
+        </div>
       ))}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/*  Main Dashboard                                                     */
+/*  Main Dashboard Component                                           */
 /* ------------------------------------------------------------------ */
 
 export default function Dashboard() {
-  /* --- state --- */
   const [lang, setLang] = useState<"en" | "sw">("en");
   const [location, setLocation] = useState("Nanyuki");
   const [crop, setCrop] = useState<Crop>("maize");
+  const [activeTab, setActiveTab] = useState<"overview" | "markets" | "arbitrage" | "calculator">("overview");
+
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [prices, setPrices] = useState<PriceData | null>(null);
   const [advice, setAdvice] = useState("");
@@ -307,7 +267,11 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
 
-  /* chat state */
+  /* Interactive Calculator State */
+  const [calcQuantity, setCalcQuantity] = useState<number>(50);
+  const [calcTransportCost, setCalcTransportCost] = useState<number>(8500);
+
+  /* Chat State */
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -315,160 +279,34 @@ export default function Dashboard() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatInitialized = useRef(false);
 
-  /* geolocation & market comparison & analysis state */
+  /* Geolocation & Market Comparison */
   const [geoLoading, setGeoLoading] = useState(false);
   const [userCoords, setUserCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [marketData, setMarketData] = useState<MarketComparisonData | null>(null);
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null);
-  const [showAllMarkets, setShowAllMarkets] = useState(false);
+  const [marketSearch, setMarketSearch] = useState("");
 
-  /* feedback form state */
+  /* Feedback State */
   const [fbName, setFbName] = useState("");
   const [fbEmail, setFbEmail] = useState("");
   const [fbMessage, setFbMessage] = useState("");
-  const [fbRating, setFbRating] = useState(0);
-  const [fbHoverRating, setFbHoverRating] = useState(0);
+  const [fbRating, setFbRating] = useState(5);
   const [fbLoading, setFbLoading] = useState(false);
   const [fbSent, setFbSent] = useState(false);
-  const [fbError, setFbError] = useState("");
 
-  /* admin panel state */
+  /* Admin State */
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminPass, setAdminPass] = useState("");
   const [adminAuthed, setAdminAuthed] = useState(false);
-  const [adminComments, setAdminComments] = useState<Array<{id: string; name: string; email: string; message: string; rating: number; timestamp: string}>>([]);
+  const [adminComments, setAdminComments] = useState<any[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
-  const logoClickCount = useRef(0);
-  const logoClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* Check URL for admin mode */
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.location.search.includes("admin=true")) {
-      setAdminOpen(true);
-    }
-  }, []);
+  /* Quick Location Switcher */
+  const popularTowns = ["Nairobi", "Eldoret", "Nakuru", "Kitale", "Meru", "Nanyuki", "Kisumu"];
 
-  /* Logo click handler for admin access (5 rapid clicks) */
-  const handleLogoClick = () => {
-    logoClickCount.current += 1;
-    if (logoClickTimer.current) clearTimeout(logoClickTimer.current);
-    logoClickTimer.current = setTimeout(() => { logoClickCount.current = 0; }, 2000);
-    if (logoClickCount.current >= 5) {
-      logoClickCount.current = 0;
-      setAdminOpen(true);
-    }
-  };
-
-  /* Submit feedback */
-  const submitFeedback = async () => {
-    if (!fbMessage.trim() || !fbName.trim()) return;
-    setFbLoading(true);
-    setFbError("");
-    try {
-      await axios.post(`${API_URL}/comments`, {
-        name: fbName.trim(),
-        email: fbEmail.trim(),
-        message: fbMessage.trim(),
-        rating: fbRating,
-      });
-      setFbSent(true);
-      setFbName("");
-      setFbEmail("");
-      setFbMessage("");
-      setFbRating(0);
-      setTimeout(() => setFbSent(false), 5000);
-    } catch {
-      setFbError("Could not submit feedback. Please try again.");
-    } finally {
-      setFbLoading(false);
-    }
-  };
-
-  /* Fetch admin comments */
-  const fetchComments = async () => {
-    if (!adminPass) return;
-    setAdminLoading(true);
-    try {
-      const res = await axios.get(`${API_URL}/comments`, {
-        headers: { Authorization: `Bearer ${adminPass}` },
-      });
-      if (res.data?.authorized) {
-        setAdminAuthed(true);
-        setAdminComments(res.data.comments || []);
-      } else {
-        setAdminAuthed(false);
-        setAdminComments([]);
-      }
-    } catch {
-      setAdminAuthed(false);
-    } finally {
-      setAdminLoading(false);
-    }
-  };
-
-  /* --- derived data --- */
-  const priceChartData = [
-    { name: t("farmGate", lang), price: prices?.farm_gate_price_ksh ?? 0 },
-    { name: t("wholesale", lang), price: prices?.wholesale_price_ksh ?? 0 },
-    { name: t("retail", lang), price: prices?.retail_price_ksh ?? 0 },
-  ];
-
-  /* --- handlers --- */
-  const handleLocationChange = (e: ChangeEvent<HTMLInputElement>) => setLocation(e.target.value);
-  const handleCropChange = (e: ChangeEvent<HTMLSelectElement>) => setCrop(e.target.value as Crop);
-
-  const handleRefresh = (e: FormEvent) => {
-    e.preventDefault();
-    setFetchTrigger((prev) => prev + 1);
-  };
-
-  /* --- language toggle: also re-fetch advisory --- */
-  const toggleLang = () => {
-    setLang((prev) => (prev === "en" ? "sw" : "en"));
-    setFetchTrigger((prev) => prev + 1);
-  };
-
-  /* --- geolocation handler --- */
-  const handleGeoLocate = () => {
-    if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
-      return;
-    }
-    setGeoLoading(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const { latitude, longitude } = pos.coords;
-        setUserCoords({ lat: latitude, lon: longitude });
-        // Reverse-geocode via OpenStreetMap Nominatim
-        try {
-          const geoRes = await axios.get(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=en`,
-            { timeout: 8000 }
-          );
-          const addr = geoRes.data?.address;
-          const town =
-            addr?.town || addr?.city || addr?.village || addr?.county || addr?.state || "My Location";
-          setLocation(town);
-          setFetchTrigger((prev) => prev + 1);
-        } catch {
-          // If geocoding fails, use coordinates-based label
-          setLocation(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
-          setFetchTrigger((prev) => prev + 1);
-        }
-        setGeoLoading(false);
-      },
-      (err) => {
-        console.warn("Geolocation error:", err.message);
-        setGeoLoading(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  };
-
-  /* --- data fetching --- */
+  /* Data Fetching */
   useEffect(() => {
     let ignore = false;
-
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -492,1158 +330,867 @@ export default function Dashboard() {
           .catch(() => null);
 
         if (ignore) return;
-
         setWeather(weatherRes.data);
         setPrices(pricesRes.data);
         setMarketData(marketsRes?.data ?? null);
         setAnalysisData(analysisRes?.data ?? null);
         setAdvice(adviceRes?.data?.advisory_report ?? "");
         setError(null);
-      } catch (caughtError) {
-        console.error("Error fetching data", caughtError);
+      } catch (err: any) {
         if (!ignore) {
-          setError(t("errorBackend", lang));
-          setAdvice("");
+          setError(err?.response?.data?.detail || "Could not retrieve live telemetry.");
         }
       } finally {
         if (!ignore) setLoading(false);
       }
     };
 
-    void fetchData();
+    fetchData();
     return () => {
       ignore = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchTrigger]);
+  }, [fetchTrigger, crop, location, lang]);
 
-  /* --- chat --- */
+  /* Geolocation Handler */
+  const handleGeoLocate = () => {
+    if (!navigator.geolocation) return;
+    setGeoLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setUserCoords({ lat: latitude, lon: longitude });
+        try {
+          const geoRes = await axios.get(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=en`,
+            { timeout: 8000 }
+          );
+          const addr = geoRes.data?.address;
+          const town = addr?.town || addr?.city || addr?.village || addr?.county || "My Farm";
+          setLocation(town);
+          setFetchTrigger((p) => p + 1);
+        } catch {
+          setLocation(`${latitude.toFixed(2)}, ${longitude.toFixed(2)}`);
+          setFetchTrigger((p) => p + 1);
+        } finally {
+          setGeoLoading(false);
+        }
+      },
+      () => setGeoLoading(false),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  /* Chat logic */
   const openChat = () => {
     if (!chatInitialized.current) {
-      setChatMessages([{ role: "assistant", content: t("chatGreeting", lang) }]);
+      setChatMessages([
+        {
+          role: "assistant",
+          content: lang === "sw"
+            ? "Jambo! Mimi ni Mkulima Copilot. Niulize kuhusu mabadiliko ya bei, hali ya udongo, au masoko ya karibu."
+            : "Hello! I am Mkulima Copilot. Ask me about real-time market spreads, soil saturation, or arbitrage opportunities.",
+        },
+      ]);
       chatInitialized.current = true;
     }
     setChatOpen(true);
   };
 
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
-
   const sendChat = async () => {
     const trimmed = chatInput.trim();
     if (!trimmed || chatLoading) return;
-
     const userMsg: ChatMessage = { role: "user", content: trimmed };
-    const updatedMessages = [...chatMessages, userMsg];
-    setChatMessages(updatedMessages);
+    const updated = [...chatMessages, userMsg];
+    setChatMessages(updated);
     setChatInput("");
     setChatLoading(true);
 
     try {
       const res = await axios.post(`${API_URL}/chat`, {
-        messages: updatedMessages,
+        messages: updated,
         context: { weather, prices },
         lang,
       });
-      const reply: string = res.data?.reply ?? res.data?.message ?? res.data?.content ?? "";
+      const reply = res.data?.reply || res.data?.message || res.data?.content || "No reply available.";
       setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch {
-      setChatMessages((prev) => [...prev, { role: "assistant", content: t("chatError", lang) }]);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: "Chat service currently unavailable." }]);
     } finally {
       setChatLoading(false);
     }
   };
 
-  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      sendChat();
-    }
-  };
+  /* Filtered Markets */
+  const filteredMarkets = useMemo(() => {
+    if (!marketData?.markets) return [];
+    if (!marketSearch.trim()) return marketData.markets;
+    const term = marketSearch.toLowerCase();
+    return marketData.markets.filter(
+      (m) => m.market.toLowerCase().includes(term) || (m.county && m.county.toLowerCase().includes(term))
+    );
+  }, [marketData, marketSearch]);
 
-  /* --- weather icon helper --- */
-  const weatherIcon = (condition: string | undefined) => {
-    if (!condition) return <Cloud className="h-5 w-5" />;
-    const c = condition.toLowerCase();
-    if (c.includes("sun") || c.includes("clear")) return <Thermometer className="h-5 w-5 text-amber-400" />;
-    if (c.includes("rain") || c.includes("drizzle")) return <Droplets className="h-5 w-5 text-blue-400" />;
-    if (c.includes("cloud") || c.includes("overcast")) return <Cloud className="h-5 w-5 text-gray-400" />;
-    return <Cloud className="h-5 w-5" />;
-  };
+  /* Calculator Calculations */
+  const calcResults = useMemo(() => {
+    const buyPrice = analysisData?.recommendation?.cheapest_buy_price || prices?.wholesale_price_ksh || 3500;
+    const sellPrice = analysisData?.recommendation?.best_sell_price || prices?.retail_price_ksh || 4800;
+    const grossRevenue = sellPrice * calcQuantity;
+    const totalPurchaseCost = buyPrice * calcQuantity;
+    const netProfit = grossRevenue - totalPurchaseCost - calcTransportCost;
+    const roi = totalPurchaseCost + calcTransportCost > 0 ? (netProfit / (totalPurchaseCost + calcTransportCost)) * 100 : 0;
+    return {
+      buyPrice,
+      sellPrice,
+      grossRevenue,
+      totalPurchaseCost,
+      netProfit,
+      roi: roi.toFixed(1),
+    };
+  }, [analysisData, prices, calcQuantity, calcTransportCost]);
 
-  /* ================================================================ */
-  /*  RENDER                                                           */
-  /* ================================================================ */
+  /* Price Bar Chart Data */
+  const priceBarData = [
+    { name: t("farmGate", lang), price: prices?.farm_gate_price_ksh || 0, fill: "#10b981" },
+    { name: t("wholesale", lang), price: prices?.wholesale_price_ksh || 0, fill: "#06b6d4" },
+    { name: t("retail", lang), price: prices?.retail_price_ksh || 0, fill: "#f59e0b" },
+  ];
 
   return (
-    <div className="agri-shell relative min-h-screen overflow-hidden overflow-x-hidden font-sans">
-      {/* Layered background */}
-      <div className="agri-atmosphere pointer-events-none fixed inset-0 z-0">
-        <img
-          src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=60"
-          alt=""
-          className="absolute inset-0 h-full w-full object-cover opacity-[0.07] animate-slow-drift"
-        />
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-950 via-emerald-950/25 to-gray-950" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/15 via-transparent to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-96 bg-gradient-to-t from-emerald-950/15 to-transparent" />
-      </div>
+    <div className="min-h-screen bg-[#070b09] text-gray-100 bg-grid-pattern relative selection:bg-emerald-500 selection:text-black">
+      {/* Ambient Top Glow */}
+      <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[1000px] h-[360px] bg-gradient-to-b from-emerald-500/10 via-teal-500/5 to-transparent blur-3xl" />
 
-      {/* Content wrapper */}
-      <div className="relative z-10">
-        {/* ============================================================== */}
-        {/*  HEADER                                                         */}
-        {/* ============================================================== */}
-        <header className="agri-header sticky top-0 z-30 border-b backdrop-blur-xl">
-          <div className="agri-header-inner mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:px-6 py-4 lg:flex-row">
-            {/* Logo + Live badge */}
-            <div className="flex items-center gap-3">
-              <button onClick={handleLogoClick} className="agri-mark flex h-10 w-10 items-center justify-center rounded-xl transition cursor-pointer">
-                <Leaf className="h-6 w-6 text-emerald-400" />
-              </button>
-              <h1 className="agri-wordmark text-xl font-bold tracking-tight">
-                kilimo.hub<span className="text-emerald-400">@ke</span>
-              </h1>
-              <span className="agri-live flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                </span>
-                {t("liveData", lang)}
-              </span>
+      {/* Navigation Header */}
+      <header className="sticky top-0 z-40 border-b border-emerald-950/60 bg-[#070b09]/80 backdrop-blur-xl">
+        <div className="kenya-gradient-line" />
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+          {/* Logo & Status */}
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 shadow-lg shadow-emerald-900/40 text-black">
+              <Leaf className="h-6 w-6 text-white" />
             </div>
-
-            {/* Controls row */}
-            <div className="agri-controls flex w-full flex-col items-center gap-3 sm:flex-row md:w-auto">
-              {/* Language toggle */}
-              <button
-                onClick={toggleLang}
-                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-300 transition hover:bg-white/10"
-              >
-                <Globe className="h-3.5 w-3.5" />
-                <span className={lang === "en" ? "text-emerald-400" : ""}>EN</span>
-                <span className="text-gray-600">/</span>
-                <span className={lang === "sw" ? "text-emerald-400" : ""}>SW</span>
-              </button>
-
-              {/* Form */}
-              <form onSubmit={handleRefresh} className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={handleLocationChange}
-                    placeholder={t("locationPlaceholder", lang)}
-                    className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder-gray-500 outline-none backdrop-blur-sm transition focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleGeoLocate}
-                    disabled={geoLoading}
-                    title={t("useMyLocation", lang)}
-                    className="flex items-center justify-center rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-gray-400 transition hover:bg-white/10 hover:text-emerald-400 disabled:opacity-50"
-                  >
-                    {geoLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Crosshair className="h-4 w-4" />
-                    )}
-                  </button>
-                </div>
-                <select
-                  value={crop}
-                  onChange={handleCropChange}
-                  className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white outline-none backdrop-blur-sm transition focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
-                >
-                  {cropOptions.map((option) => (
-                    <option key={option.value} value={option.value} className="bg-gray-900">
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  {loading ? t("fetching", lang) : t("ok", lang)}
-                </button>
-              </form>
-
-              {/* Chat button */}
-              <button
-                onClick={openChat}
-                className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-300 transition hover:bg-white/10 hover:text-emerald-400"
-              >
-                <MessageCircle className="h-4 w-4" />
-                <span className="hidden sm:inline">{t("chatTitle", lang)}</span>
-              </button>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-base font-bold tracking-tight text-white">AGRIQUANT</span>
+                <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 text-[10px] font-mono text-emerald-400">KENYA v2.0</span>
+              </div>
+              <p className="text-[11px] text-gray-400 font-sans">Full-Stack Agricultural Intelligence & Arbitrage</p>
             </div>
           </div>
-        </header>
 
-        {/* Hero Banner */}
-        <div className="agri-hero relative overflow-hidden">
-          <div className="absolute inset-0 z-0">
-            <img
-              src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1920&q=80"
-              alt=""
-              className="h-full w-full object-cover opacity-40 animate-slow-drift"
-            />
-            <div className="absolute inset-0 bg-gradient-to-b from-gray-950/20 via-gray-950/40 to-gray-950" />
-            <div className="absolute inset-0 bg-gradient-to-r from-amber-900/10 via-transparent to-emerald-900/10" />
+          {/* Interactive Navigation Tabs */}
+          <div className="flex items-center rounded-xl bg-emerald-950/40 border border-emerald-800/40 p-1">
+            <button
+              onClick={() => setActiveTab("overview")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                activeTab === "overview" ? "bg-emerald-600 text-white shadow" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setActiveTab("markets")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                activeTab === "markets" ? "bg-emerald-600 text-white shadow" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Live Markets
+            </button>
+            <button
+              onClick={() => setActiveTab("arbitrage")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                activeTab === "arbitrage" ? "bg-emerald-600 text-white shadow" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Spatial Spreads
+            </button>
+            <button
+              onClick={() => setActiveTab("calculator")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                activeTab === "calculator" ? "bg-emerald-600 text-white shadow" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Profit Simulator
+            </button>
           </div>
-          <div className="agri-hero-content relative z-10 mx-auto max-w-7xl px-4 sm:px-6 py-16 sm:py-24 md:py-32 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-4 py-1.5 mb-5 backdrop-blur-sm">
-              <Sprout className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-xs font-medium text-emerald-300">
-                {lang === "sw" ? "Dashibodi ya Kilimo cha Kisasa" : "Agricultural Intelligence Platform"}
-              </span>
-            </div>
-            <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-4 sm:mb-5 tracking-tight leading-tight">
-              Smart Farming,{" "}
-              <span className="agri-hero-accent">
-                Smarter Decisions
-              </span>
-            </h2>
-            <p className="text-base sm:text-lg text-gray-300 max-w-2xl mx-auto leading-relaxed">
-              {lang === "sw"
-                ? "Pata bei za soko, hali ya hewa, na ushauri wa kilimo — yote katika sehemu moja."
-                : "Get live market prices, weather forecasts, and farming advisory — all in one dashboard."}
-            </p>
+
+          {/* Controls: Language, Copilot & Refresh */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => setLang(lang === "en" ? "sw" : "en")}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-800/40 bg-emerald-950/30 px-3 py-1.5 text-xs font-mono text-emerald-300 hover:bg-emerald-900/40 transition"
+            >
+              <Globe className="h-3.5 w-3.5 text-emerald-400" />
+              <span>{lang.toUpperCase()}</span>
+            </button>
+
+            <button
+              onClick={openChat}
+              className="flex items-center gap-2 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white px-3.5 py-1.5 text-xs font-semibold shadow-md shadow-emerald-900/30 transition cursor-pointer"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+              <span>Copilot AI</span>
+            </button>
           </div>
-          {/* Bottom glow line */}
-          <div className="relative z-10 h-px bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
         </div>
 
-        {/* ============================================================== */}
-        {/*  MAIN CONTENT                                                   */}
-        {/* ============================================================== */}
-        <main className="agri-main mx-auto max-w-7xl px-4 sm:px-6 py-8">
-          {/* Error */}
-          {error && (
-            <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-sm text-red-300 backdrop-blur-xl">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-red-400" />
-                {error}
-              </div>
+        {/* Dynamic Location & Quick Filter Sub-bar */}
+        <div className="border-t border-emerald-950/40 bg-[#09110d]/90 px-4 sm:px-6 py-2.5">
+          <div className="mx-auto max-w-7xl flex flex-wrap items-center justify-between gap-3">
+            {/* Quick Towns */}
+            <div className="flex items-center gap-1.5 overflow-x-auto text-xs py-1">
+              <span className="text-gray-500 flex items-center gap-1 text-[11px] font-mono mr-1">
+                <MapPin className="h-3.5 w-3.5 text-emerald-500" /> HUB:
+              </span>
+              {popularTowns.map((town) => (
+                <button
+                  key={town}
+                  onClick={() => {
+                    setLocation(town);
+                    setFetchTrigger((p) => p + 1);
+                  }}
+                  className={`rounded-full px-2.5 py-0.5 text-xs transition ${
+                    location.toLowerCase() === town.toLowerCase()
+                      ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold"
+                      : "text-gray-400 hover:text-gray-200 bg-white/5"
+                  }`}
+                >
+                  {town}
+                </button>
+              ))}
             </div>
-          )}
 
-          {/* Initial loading: show structure only, never fabricated readings */}
-          {loading && !weather && !prices ? (
-            <div className="agri-loading" aria-busy="true" aria-live="polite">
-              <div className="agri-loading-heading">
-                <div className="agri-loading-spinner"><Loader2 className="h-5 w-5 animate-spin" /></div>
-                <div>
-                  <p className="agri-loading-title">{lang === "sw" ? "Tunaandaa taarifa za shamba lako" : "Preparing your farm outlook"}</p>
-                  <p className="agri-loading-copy">{lang === "sw" ? "Tunatafuta hali ya hewa, bei na ushauri wa mazao." : "Gathering weather, market and crop signals for your location."}</p>
-                </div>
-                <span className="agri-sync-pill"><span />{lang === "sw" ? "Inasawazisha" : "Syncing data"}</span>
+            {/* Custom Location Search */}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && setFetchTrigger((p) => p + 1)}
+                  placeholder="Type any Kenyan town..."
+                  className="w-48 rounded-lg glass-input px-3 py-1 text-xs placeholder-gray-500"
+                />
               </div>
-              <div className="agri-loading-grid">
-                {[
-                  { label: lang === "sw" ? "Hali ya hewa" : "Field conditions", icon: <Cloud className="h-4 w-4" /> },
-                  { label: lang === "sw" ? "Bei za soko" : "Market prices", icon: <BarChartIcon className="h-4 w-4" /> },
-                  { label: lang === "sw" ? "Ushauri wa zao" : "Crop advisory", icon: <Sprout className="h-4 w-4" /> },
-                ].map((tile) => (
-                  <div className="agri-loading-card" key={tile.label}>
-                    <div className="agri-loading-card-title"><span>{tile.icon}</span>{tile.label}</div>
-                    <div className="agri-skeleton agri-skeleton-primary" />
-                    <div className="agri-skeleton agri-skeleton-secondary" />
-                    <div className="agri-skeleton agri-skeleton-tertiary" />
-                  </div>
-                ))}
-              </div>
+              <button
+                onClick={handleGeoLocate}
+                disabled={geoLoading}
+                title="Locate with GPS"
+                className="flex items-center justify-center h-7 w-7 rounded-lg border border-emerald-800/40 bg-emerald-950/30 text-emerald-400 hover:bg-emerald-900/40 transition"
+              >
+                {geoLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Crosshair className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => setFetchTrigger((p) => p + 1)}
+                className="flex items-center gap-1 rounded-lg bg-emerald-700/60 hover:bg-emerald-600 text-white px-2.5 py-1 text-xs font-medium transition"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+                <span>Sync</span>
+              </button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3 transition-all duration-500">
-              {/* ======================================================== */}
-              {/*  LEFT COLUMN                                              */}
-              {/* ======================================================== */}
-              <div className="space-y-6 lg:col-span-1">
-                {/* Weather Card */}
-                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-emerald-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-emerald-500/10">
-                  <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-gray-200">
-                    <Cloud className="h-5 w-5 text-blue-400" />
-                    {t("liveWeather", lang)}: {weather?.location ?? t("unavailable", lang)}
-                  </h2>
-
-                  {/* Temperature */}
-                  <div className="mb-1 flex items-start gap-1">
-                    <span className="text-6xl font-bold tracking-tighter text-white">
-                      {weather?.current_temp ?? "--"}
-                    </span>
-                    <span className="mt-2 text-2xl font-light text-gray-400">&deg;C</span>
-                  </div>
-
-                  {/* Condition */}
-                  <div className="mb-6 flex items-center gap-2 text-sm text-gray-400">
-                    {weatherIcon(weather?.condition)}
-                    {weather?.condition ?? t("waitingWeather", lang)}
-                  </div>
-
-                  {/* Sub-cards */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-blue-500/8 to-transparent p-3">
-                      <div className="mb-1 flex items-center gap-1.5 text-xs text-gray-500">
-                        <Droplets className="h-3.5 w-3.5 text-blue-400" />
-                        {t("humidity", lang)}
-                      </div>
-                      <p className="text-lg font-bold text-white">{weather?.humidity ?? "--"}%</p>
-                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-700/50">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-700"
-                          style={{ width: `${weather?.humidity ?? 0}%` }}
-                        />
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-emerald-500/8 to-transparent p-3">
-                      <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
-                        <div className="flex items-center gap-1.5">
-                          <Sprout className="h-3.5 w-3.5 text-emerald-400" />
-                          {t("soilMoistureEst", lang)}
-                        </div>
-                      </div>
-                      <div className="flex items-baseline justify-between">
-                        <p className="text-lg font-bold text-white">
-                          {weather?.soil_moisture_estimate !== undefined ? `${weather.soil_moisture_estimate.toFixed(1)}%` : "--"}
-                        </p>
-                        {weather?.soil_moisture_raw !== undefined && (
-                          <span className="text-[11px] font-mono text-gray-400">
-                            {weather.soil_moisture_raw.toFixed(3)} m³/m³
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-gray-700/50">
-                        <div
-                          className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700"
-                          style={{ width: `${Math.min(100, Math.max(0, weather?.soil_moisture_estimate ?? 0))}%` }}
-                        />
-                      </div>
-                      {weather?.soil_moisture_status && (
-                        <p className="mt-2 text-[10px] font-medium text-emerald-300/90 truncate">
-                          ● {weather.soil_moisture_status}
-                        </p>
-                      )}
-                      {weather?.soil_temperature_c !== undefined && (
-                        <p className="mt-1 text-[10px] text-gray-400 flex items-center gap-1">
-                          <Thermometer className="h-3 w-3 text-orange-400" />
-                          <span>{t("soilTemp", lang)}: {weather.soil_temperature_c.toFixed(1)}°C</span>
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Wind */}
-                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-white/5 bg-white/5 p-3 text-sm">
-                    <Wind className="h-4 w-4 text-gray-400" />
-                    <span className="text-gray-500">{t("wind", lang)}:</span>
-                    <span className="font-semibold text-white">{weather?.wind_kph ?? "--"} kph</span>
-                  </div>
-                </div>
-
-                {/* Agricultural Risks */}
-                {weather && weather.agri_risk_alerts.length > 0 && (
-                  <div className="rounded-2xl border border-red-500/25 bg-red-500/8 p-6 shadow-2xl shadow-red-500/8 ring-1 ring-red-500/[0.08] inset backdrop-blur-xl">
-                    <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-red-400">
-                      <AlertTriangle className="h-5 w-5" />
-                      {t("agriculturalRisks", lang)}
-                    </h2>
-                    <ul className="space-y-3 text-sm text-red-300">
-                      {weather.agri_risk_alerts.map((alert) => (
-                        <li key={alert} className="flex items-start gap-2.5">
-                          <span className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-red-500" />
-                          {alert}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              {/* ======================================================== */}
-              {/*  RIGHT COLUMN                                             */}
-              {/* ======================================================== */}
-              <div className="space-y-6 lg:col-span-2">
-                {/* Market Intelligence */}
-                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-amber-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-amber-500/10">
-                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="flex items-center gap-2 text-base font-semibold text-gray-200">
-                      <TrendingUp className="h-5 w-5 text-emerald-400" />
-                      {t("marketIntelligence", lang)}: {prices?.crop ?? crop} ({prices?.unit ?? "unit"})
-                    </h2>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                        prices?.data_status?.toLowerCase().includes("live")
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : prices?.data_status?.toLowerCase().includes("snapshot")
-                          ? "bg-sky-500/10 text-sky-400"
-                          : "bg-amber-500/10 text-amber-400"
-                      }`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          prices?.data_status?.toLowerCase().includes("live")
-                            ? "bg-emerald-400"
-                            : prices?.data_status?.toLowerCase().includes("snapshot")
-                            ? "bg-sky-400"
-                            : "bg-amber-400"
-                        }`}
-                      />
-                      {prices?.data_status ?? (prices?.retail_price_ksh ? t("liveFromKamis", lang) : t("unavailable", lang))}
-                    </span>
-                  </div>
-
-                  {/* Price metric cards */}
-                  <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                    <div className="relative overflow-hidden rounded-xl border border-amber-500/25 bg-amber-500/8 p-4 text-center ring-1 ring-amber-500/[0.06] inset transition hover:bg-amber-500/12">
-                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-amber-400 to-orange-400" />
-                      <div className="mb-2 flex items-center justify-center gap-1.5">
-                        <Wheat className="h-4 w-4 text-amber-500/60" />
-                        <p className="text-xs font-medium uppercase tracking-wider text-amber-500/70">
-                          {t("farmGate", lang)}
-                        </p>
-                      </div>
-                      <p className="text-3xl font-bold text-amber-400">
-                        KES {prices?.farm_gate_price_ksh?.toLocaleString() ?? "N/A"}
-                      </p>
-                    </div>
-                    <div className="relative overflow-hidden rounded-xl border border-blue-500/25 bg-blue-500/8 p-4 text-center ring-1 ring-blue-500/[0.06] inset transition hover:bg-blue-500/12">
-                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400" />
-                      <div className="mb-2 flex items-center justify-center gap-1.5">
-                        <BarChart3 className="h-4 w-4 text-blue-500/60" />
-                        <p className="text-xs font-medium uppercase tracking-wider text-blue-500/70">
-                          {t("wholesale", lang)}
-                        </p>
-                      </div>
-                      <p className="text-3xl font-bold text-blue-400">
-                        KES {prices?.wholesale_price_ksh?.toLocaleString() ?? "N/A"}
-                      </p>
-                    </div>
-                    <div className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-emerald-500/8 p-4 text-center ring-1 ring-emerald-500/[0.06] inset transition hover:bg-emerald-500/12">
-                      <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-teal-400" />
-                      <div className="mb-2 flex items-center justify-center gap-1.5">
-                        <ShoppingCart className="h-4 w-4 text-emerald-500/60" />
-                        <p className="text-xs font-medium uppercase tracking-wider text-emerald-500/70">
-                          {t("retail", lang)}
-                        </p>
-                      </div>
-                      <p className="text-3xl font-bold text-emerald-400">
-                        KES {prices?.retail_price_ksh?.toLocaleString() ?? "N/A"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Bar chart */}
-                  <div className="h-48 sm:h-56 md:h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={priceChartData}>
-                        <defs>
-                          <linearGradient id="priceBarGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#F97316" stopOpacity={1} />
-                            <stop offset="100%" stopColor="#EA580C" stopOpacity={0.85} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
-                        <YAxis stroke="#64748b" fontSize={12} />
-                        <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                        <Bar dataKey="price" fill="url(#priceBarGrad)" radius={[8, 8, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* 14-Day Forecast */}
-                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-cyan-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-cyan-500/10">
-                  <h2 className="mb-5 flex items-center gap-2 text-base font-semibold text-gray-200">
-                    <BarChartIcon className="h-5 w-5 text-cyan-400" />
-                    {t("forecast14", lang)} ({t("tempRain", lang)})
-                  </h2>
-                  <div className="h-48 sm:h-56 md:h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={weather?.forecast ?? []}>
-                        <defs>
-                          <linearGradient id="maxGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#FB923C" stopOpacity={0.35} />
-                            <stop offset="100%" stopColor="#FB923C" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="minGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#60A5FA" stopOpacity={0.35} />
-                            <stop offset="100%" stopColor="#60A5FA" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="rainGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#22D3EE" stopOpacity={0.35} />
-                            <stop offset="100%" stopColor="#22D3EE" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="date" fontSize={11} stroke="#64748b" />
-                        <YAxis yAxisId="left" stroke="#64748b" fontSize={11} />
-                        <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={11} />
-                        <Tooltip content={<DarkTooltip />} />
-                        <Area yAxisId="left" type="monotone" dataKey="max" stroke="transparent" fill="url(#maxGrad)" />
-                        <Area yAxisId="left" type="monotone" dataKey="min" stroke="transparent" fill="url(#minGrad)" />
-                        <Area yAxisId="right" type="monotone" dataKey="rain_mm" stroke="transparent" fill="url(#rainGrad)" />
-                        <Line
-                          yAxisId="left"
-                          type="monotone"
-                          dataKey="max"
-                          stroke="#FB923C"
-                          strokeWidth={2.5}
-                          dot={false}
-                          name={t("maxTemp", lang) + " (\u00B0C)"}
-                        />
-                        <Line
-                          yAxisId="left"
-                          type="monotone"
-                          dataKey="min"
-                          stroke="#60A5FA"
-                          strokeWidth={2.5}
-                          dot={false}
-                          name={t("minTemp", lang) + " (\u00B0C)"}
-                        />
-                        <Line
-                          yAxisId="right"
-                          type="monotone"
-                          dataKey="rain_mm"
-                          stroke="#22D3EE"
-                          strokeWidth={2.5}
-                          dot={false}
-                          name={t("rain", lang) + " (mm)"}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Legend */}
-                  <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-orange-400" /> {t("maxTemp", lang)}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-blue-400" /> {t("minTemp", lang)}
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-cyan-400" /> {t("rain", lang)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Section Divider */}
-              <div className="lg:col-span-3 relative my-4 overflow-hidden rounded-2xl">
-                <div className="absolute inset-0">
-                  <img
-                    src="https://images.unsplash.com/photo-1592982537447-6f2a6a0c1b36?w=1200&q=80"
-                    alt=""
-                    className="h-full w-full object-cover opacity-35 animate-slow-drift"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/80 via-gray-950/40 to-gray-950/80" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-orange-500/5 via-transparent to-rose-500/5" />
-                </div>
-                <div className="relative z-10 px-6 py-6 flex items-center gap-4">
-                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-orange-400 to-rose-500" />
-                  <div>
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                      {lang === "sw" ? "Ulinganisho wa Masoko" : "Market Intelligence"}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {lang === "sw" ? "Bei kutoka vyanzo mbalimbali" : "Multi-source price comparison across Kenya"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* ======================================================== */}
-              {/*  MARKET COMPARISON (full width)                           */}
-              {/* ======================================================== */}
-              {marketData && marketData.markets.length > 0 && (
-                <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 shadow-2xl shadow-black/20 shadow-orange-500/5 ring-1 ring-white/[0.05] inset backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-white/20 hover:bg-white/[0.09] hover:shadow-orange-500/10">
-                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <h2 className="flex items-center gap-2 text-base font-semibold text-gray-200">
-                      <MapPin className="h-5 w-5 text-orange-400" />
-                      {t("marketComparison", lang)}: {marketData.crop} ({marketData.unit})
-                    </h2>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {/* Data source badges */}
-                      {marketData.data_sources && marketData.data_sources.length > 0 && (
-                        <span className="flex items-center gap-1.5 rounded-full bg-indigo-500/10 px-2.5 py-1 text-xs font-medium text-indigo-400">
-                          <Database className="h-3 w-3" />
-                          {marketData.data_sources.join(" + ")}
-                        </span>
-                      )}
-                      {/* Nearest market badge */}
-                      {analysisData?.nearest_market && (
-                        <span className="flex items-center gap-1.5 rounded-full bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400">
-                          <Navigation className="h-3 w-3" />
-                          {t("nearestMarket", lang)}: {analysisData.nearest_market}
-                          {analysisData.distance_km && ` (${analysisData.distance_km} ${t("kmAway", lang)})`}
-                        </span>
-                      )}
-                      <button
-                        onClick={() => setShowAllMarkets(!showAllMarkets)}
-                        className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-gray-400 transition hover:bg-white/10"
-                      >
-                        {showAllMarkets ? t("keyMarkets", lang) : t("allMarkets", lang)}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Market comparison bar chart */}
-                  {(() => {
-                    const hasKeyMarkets = marketData.markets.some((m) => m.is_key_market);
-                    const displayMarkets = (showAllMarkets || !hasKeyMarkets)
-                      ? marketData.markets
-                      : marketData.markets.filter((m) => m.is_key_market);
-                    const chartData = displayMarkets
-                      .filter((m) => m.retail_price !== null || m.wholesale_price !== null)
-                      .slice(0, 12)
-                      .map((m) => ({
-                        name: m.market,
-                        Wholesale: m.wholesale_price ?? 0,
-                        Retail: m.retail_price ?? 0,
-                      }));
-
-                    return (
-                  <>
-                  {chartData.length > 0 && (
-                  <div className="h-52 sm:h-60 md:h-72 mb-4">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chartData}>
-                        <defs>
-                          <linearGradient id="wholesaleGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#38BDF8" stopOpacity={1} />
-                            <stop offset="100%" stopColor="#0EA5E9" stopOpacity={0.85} />
-                          </linearGradient>
-                          <linearGradient id="retailGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#A3E635" stopOpacity={1} />
-                            <stop offset="100%" stopColor="#84CC16" stopOpacity={0.85} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="name" stroke="#64748b" fontSize={11} angle={-20} textAnchor="end" height={50} />
-                        <YAxis stroke="#64748b" fontSize={11} />
-                        <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                        <Bar dataKey="Wholesale" fill="url(#wholesaleGrad)" radius={[6, 6, 0, 0]} />
-                        <Bar dataKey="Retail" fill="url(#retailGrad)" radius={[6, 6, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  )}
-
-                  {/* Legend for market comparison */}
-                  <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-5 rounded-sm bg-sky-400" /> {t("wholesale", lang)} (KES)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2.5 w-5 rounded-sm bg-lime-400" /> {t("retail", lang)} (KES)
-                    </span>
-                  </div>
-
-                  {/* Market table */}
-                  <div className="mt-4 overflow-x-auto">
-                    <table className="w-full text-xs sm:text-sm">
-                      <thead>
-                        <tr className="border-b border-white/10 text-left text-xs uppercase tracking-wider text-gray-500">
-                          <th className="pb-3 pr-4">{t("market", lang)}</th>
-                          <th className="pb-3 pr-4 text-right">{t("wholesale", lang)}</th>
-                          <th className="pb-3 pr-4 text-right">{t("retail", lang)}</th>
-                          <th className="pb-3 text-right">{t("trend", lang)}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
-                        {displayMarkets
-                          .filter((m) => m.retail_price !== null || m.wholesale_price !== null)
-                          .slice(0, 10)
-                          .map((m, idx) => {
-                            const prediction = analysisData?.predictions?.find(
-                              (p) => p.market.toLowerCase() === m.market.toLowerCase()
-                            );
-                            const isBestMarket = analysisData?.recommendation?.best_sell_market?.toLowerCase() === m.market.toLowerCase();
-                            return (
-                              <tr key={m.market} className={`text-gray-300 transition-colors hover:bg-white/[0.04] ${idx % 2 === 1 ? "bg-white/[0.02]" : ""} ${isBestMarket ? "border-l-2 border-l-emerald-500/50" : ""}`}>
-                                <td className="py-2.5 pr-4 font-medium">
-                                  <div className="flex items-center gap-2">
-                                    {m.is_key_market && (
-                                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-                                    )}
-                                    {isBestMarket && (
-                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-glow-pulse" />
-                                    )}
-                                    {m.market}
-                                  </div>
-                                </td>
-                                <td className="py-2 pr-4 text-right text-sky-400">
-                                  KES {m.wholesale_price?.toLocaleString() ?? "—"}
-                                </td>
-                                <td className="py-2 pr-4 text-right text-lime-400">
-                                  KES {m.retail_price?.toLocaleString() ?? "—"}
-                                </td>
-                                <td className="py-2 text-right">
-                                  {prediction ? (
-                                    <span
-                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                                        prediction.trend === "rising"
-                                          ? "bg-violet-500/15 text-violet-300 border border-violet-500/20"
-                                          : prediction.trend === "falling"
-                                          ? "bg-amber-500/15 text-amber-300 border border-amber-500/20"
-                                          : "bg-gray-500/15 text-gray-400"
-                                      }`}
-                                      title={prediction.market_type || `${prediction.predicted_change_pct}% spread vs national median`}
-                                    >
-                                      {prediction.trend === "rising" && <ArrowUpRight className="h-3 w-3 text-violet-400" />}
-                                      {prediction.trend === "falling" && <ArrowDownRight className="h-3 w-3 text-amber-400" />}
-                                      {prediction.trend === "stable" && <Minus className="h-3 w-3" />}
-                                      {prediction.predicted_change_pct > 0 ? "+" : ""}
-                                      {prediction.predicted_change_pct}%
-                                    </span>
-                                  ) : (
-                                    <span className="text-gray-600">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                      </tbody>
-                    </table>
-                  </div>
-                  </>
-                  );
-                  })()}
-                </div>
-              )}
-
-              {/* Empty Market Data Notice */}
-              {marketData && marketData.markets.length === 0 && (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-8 text-center lg:col-span-3">
-                  <MapPin className="mx-auto h-8 w-8 text-amber-400/60 mb-2" />
-                  <h3 className="text-base font-semibold text-gray-200">
-                    {lang === "sw" ? "Hakuna data ya soko leo" : "No Market Records Reported Today"}
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-400 max-w-lg mx-auto">
-                    {marketData.status_note || (lang === "sw" ? "Taarifa rasmi za KAMIS bado hazijatolewa leo kwa zao hili. Tafadhali chagua zao lingine au angalia tena baadaye." : "Official KAMIS market survey data is pending for this crop today. Please select another crop or check back later.")}
-                  </p>
-                </div>
-              )}
-
-              {/* Section Divider */}
-              <div className="lg:col-span-3 relative my-4 overflow-hidden rounded-2xl">
-                <div className="absolute inset-0">
-                  <img
-                    src="https://images.unsplash.com/photo-1574943320219-5532a69ef5d8?w=1200&q=80"
-                    alt=""
-                    className="h-full w-full object-cover opacity-35 animate-slow-drift"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-r from-gray-950/80 via-gray-950/40 to-gray-950/80" />
-                  <div className="absolute inset-0 bg-gradient-to-r from-violet-500/5 via-transparent to-fuchsia-500/5" />
-                </div>
-                <div className="relative z-10 px-6 py-6 flex items-center gap-4">
-                  <div className="h-10 w-1.5 rounded-full bg-gradient-to-b from-violet-400 to-fuchsia-500" />
-                  <div>
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                      {lang === "sw" ? "Ulinganisho na Tofauti za Masoko" : "Market Comparison & Spatial Arbitrage"}
-                    </h3>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      {lang === "sw" ? "Tofauti za bei kitaifa na masoko yenye faida" : "Cross-market price spreads, arbitrage opportunities & national benchmarks"}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* ======================================================== */}
-              {/*  PRICE ANALYSIS & PREDICTION (full width)                */}
-              {/* ======================================================== */}
-              {analysisData && analysisData.market_analysis && analysisData.market_analysis.length > 0 && (
-                <div className="rounded-2xl border border-violet-500/25 bg-violet-500/8 p-6 shadow-2xl shadow-violet-500/8 ring-1 ring-violet-500/[0.06] inset backdrop-blur-xl lg:col-span-3 transition-all duration-300 hover:border-violet-500/35 hover:bg-violet-500/10 hover:shadow-violet-500/15">
-                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h2 className="flex items-center gap-2 text-base font-semibold text-violet-300">
-                        <BarChart3 className="h-5 w-5 text-violet-400" />
-                        {t("analysisPrediction", lang)}: {analysisData.crop}
-                      </h2>
-                      <p className="mt-1 text-xs text-gray-400">
-                        {lang === "sw"
-                          ? "Tofauti ya bei za masoko dhidi ya wastani wa kitaifa na fursa za mauzo"
-                          : "Spatial arbitrage: Compare local market prices against national benchmark median"}
-                      </p>
-                    </div>
-                    {analysisData.data_sources && analysisData.data_sources.length > 0 && (
-                      <span className="flex items-center gap-1.5 rounded-full bg-violet-500/10 px-2.5 py-1 text-xs font-medium text-violet-300 self-start sm:self-auto">
-                        <Database className="h-3 w-3" />
-                        {analysisData.data_sources.join(" + ")}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Stats row */}
-                  <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-emerald-500/10 to-transparent p-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">{t("avgRetail", lang)}</p>
-                      <p className="text-lg font-bold text-emerald-400">
-                        KES {analysisData.statistics.avg_retail.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-blue-500/10 to-transparent p-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">{t("avgWholesale", lang)}</p>
-                      <p className="text-lg font-bold text-blue-400">
-                        KES {analysisData.statistics.avg_wholesale.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-amber-500/10 to-transparent p-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">{t("priceSpread", lang)}</p>
-                      <p className="text-lg font-bold text-amber-400">
-                        KES {analysisData.statistics.price_spread.toLocaleString()}
-                      </p>
-                    </div>
-                    <div className="rounded-xl border border-white/8 bg-gradient-to-br from-violet-500/10 to-transparent p-3 text-center">
-                      <p className="mb-1 text-xs text-gray-500">{t("volatility", lang)}</p>
-                      <p className={`text-lg font-bold ${
-                        analysisData.statistics.volatility_cv_pct > 30
-                          ? "text-red-400"
-                          : analysisData.statistics.volatility_cv_pct > 15
-                          ? "text-amber-400"
-                          : "text-emerald-400"
-                      }`}>
-                        {analysisData.statistics.volatility_cv_pct}%
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Recommendation cards */}
-                  <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {analysisData.recommendation.best_sell_market && (
-                      <div className="relative overflow-hidden rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/12 to-emerald-500/3 p-4 ring-1 ring-emerald-500/[0.06] inset">
-                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-400 to-teal-400" />
-                        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-emerald-500">
-                          <TrendingUp className="h-3.5 w-3.5" />
-                          {t("bestSellMarket", lang)}
-                        </div>
-                        <p className="text-lg font-bold text-white">
-                          {analysisData.recommendation.best_sell_market}
-                        </p>
-                        <p className="text-sm text-emerald-400">
-                          KES {analysisData.recommendation.best_sell_price?.toLocaleString()}/{analysisData.unit}
-                        </p>
-                      </div>
-                    )}
-                    {analysisData.recommendation.cheapest_buy_market && (
-                      <div className="relative overflow-hidden rounded-xl border border-blue-500/25 bg-gradient-to-br from-blue-500/12 to-blue-500/3 p-4 ring-1 ring-blue-500/[0.06] inset">
-                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-400 to-cyan-400" />
-                        <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-blue-500">
-                          <ArrowDownRight className="h-3.5 w-3.5" />
-                          {t("cheapestBuy", lang)}
-                        </div>
-                        <p className="text-lg font-bold text-white">
-                          {analysisData.recommendation.cheapest_buy_market}
-                        </p>
-                        <p className="text-sm text-blue-400">
-                          KES {analysisData.recommendation.cheapest_buy_price?.toLocaleString()}/{analysisData.unit}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Spatial Arbitrage chart */}
-                  {analysisData.predictions.length > 0 && (
-                    <div className="h-48 sm:h-56 md:h-72 mb-4">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={analysisData.predictions.map((p) => ({
-                            name: p.market,
-                            [t("current", lang)]: p.current_price,
-                            [t("predicted", lang)]: p.predicted_price,
-                          }))}
-                        >
-                          <defs>
-                            <linearGradient id="currentGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#A78BFA" stopOpacity={1} />
-                              <stop offset="100%" stopColor="#7C3AED" stopOpacity={0.85} />
-                            </linearGradient>
-                            <linearGradient id="predictedGrad" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#38BDF8" stopOpacity={1} />
-                              <stop offset="100%" stopColor="#0284C7" stopOpacity={0.85} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                          <XAxis dataKey="name" stroke="#64748b" fontSize={11} angle={-20} textAnchor="end" height={50} />
-                          <YAxis stroke="#64748b" fontSize={11} />
-                          <Tooltip content={<DarkTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
-                          <Bar dataKey={t("current", lang)} fill="url(#currentGrad)" radius={[6, 6, 0, 0]} />
-                          <Bar dataKey={t("predicted", lang)} fill="url(#predictedGrad)" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-
-                  {/* Arbitrage legend */}
-                  <div className="mb-4 flex flex-wrap items-center justify-center gap-4 text-xs text-gray-400">
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-violet-400" /> {t("current", lang)} (KES)
-                    </span>
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-2 w-4 rounded-sm bg-sky-400" /> {t("predicted", lang)} (KES)
-                    </span>
-                  </div>
-
-                  {/* Analysis advisory text */}
-                  {analysisData.advisory && (
-                    <div className="whitespace-pre-line rounded-xl border border-white/5 bg-white/[0.03] p-4 text-sm leading-relaxed text-gray-300">
-                      {analysisData.advisory}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ======================================================== */}
-              {/*  ADVISORY (full width)                                    */}
-              {/* ======================================================== */}
-              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-6 shadow-2xl shadow-emerald-500/8 ring-1 ring-emerald-500/[0.06] inset backdrop-blur-xl lg:col-span-3">
-                <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-emerald-400">
-                  <Sprout className="h-5 w-5" />
-                  {t("smartAdvisory", lang)}
-                </h2>
-                <div className="whitespace-pre-line rounded-xl border border-white/5 bg-white/[0.03] p-5 text-sm leading-relaxed text-gray-300">
-                  {advice || t("analyzingData", lang)}
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-
-        {/* ================================================================ */}
-        {/*  FEEDBACK SECTION                                                 */}
-        {/* ================================================================ */}
-        <section className="agri-feedback relative overflow-hidden">
-          <div className="absolute inset-0 z-0">
-            <img
-              src="https://images.unsplash.com/photo-1625246333195-78d9c38ad449?w=1920&q=60"
-              alt=""
-              className="h-full w-full object-cover opacity-15"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/85 to-gray-950/95" />
           </div>
-          <div className="relative z-10 mx-auto max-w-3xl px-4 sm:px-6 py-12">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-1.5 mb-4">
-                <MessageSquare className="h-3.5 w-3.5 text-amber-400" />
-                <span className="text-xs font-medium text-amber-300">
-                  {lang === "sw" ? "Maoni Yako" : "Your Feedback"}
-                </span>
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2">
-                {lang === "sw" ? "Tusaidie Kuboresha" : "Help Us Improve"}
-              </h2>
-              <p className="text-sm text-gray-400 max-w-lg mx-auto">
-                {lang === "sw"
-                  ? "Tuma maoni, mapendekezo, au ripoti hitilafu. Sauti yako ni muhimu kwetu."
-                  : "Share your feedback, suggestions, or report issues. Your voice helps us build a better tool for Kenyan farmers."}
-              </p>
-            </div>
+        </div>
+      </header>
 
-            {fbSent ? (
-              <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/8 p-8 text-center backdrop-blur-xl">
-                <CheckCircle className="h-12 w-12 text-emerald-400 mx-auto mb-3" />
-                <h3 className="text-lg font-bold text-white mb-1">
-                  {lang === "sw" ? "Asante!" : "Thank You!"}
-                </h3>
-                <p className="text-sm text-gray-400">
-                  {lang === "sw" ? "Maoni yako yamepokelewa." : "Your feedback has been received."}
+      {/* Main Content Area */}
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-6">
+        {/* Interactive Crop Selector Bar */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2.5">
+          {cropOptions.map((c) => {
+            const isSelected = crop === c.value;
+            return (
+              <button
+                key={c.value}
+                onClick={() => setCrop(c.value)}
+                className={`flex flex-col items-start p-3 rounded-xl border transition-all text-left ${
+                  isSelected
+                    ? "border-emerald-500 bg-gradient-to-b from-emerald-950/60 to-emerald-950/20 shadow-lg shadow-emerald-950/50"
+                    : "border-emerald-950/60 bg-[#0d1612]/60 hover:border-emerald-800/50 hover:bg-[#121f19]/80"
+                }`}
+              >
+                <div className="flex items-center justify-between w-full mb-1">
+                  <span className="text-xl">{c.icon}</span>
+                  {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />}
+                </div>
+                <span className={`text-xs font-semibold ${isSelected ? "text-emerald-300" : "text-gray-200"}`}>
+                  {c.label}
+                </span>
+                <span className="text-[10px] text-gray-500 font-mono mt-0.5">{c.unit}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Tab 1: Overview Dashboard */}
+        {activeTab === "overview" && (
+          <div className="space-y-6">
+            {/* Top Stat Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Soil Moisture & Saturation */}
+              <div className="glass-panel p-5 relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <Sprout className="h-4 w-4" /> Topsoil Telemetry
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-mono">0–1cm depth</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold font-mono text-white">
+                    {weather?.soil_moisture_estimate !== undefined ? `${weather.soil_moisture_estimate.toFixed(1)}%` : "--"}
+                  </span>
+                  <span className="text-xs text-gray-400 font-mono">volumetric</span>
+                </div>
+                <div className="mt-3 w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                  <div
+                    className="bg-emerald-500 h-full rounded-full transition-all duration-700"
+                    style={{ width: `${Math.min(100, Math.max(0, weather?.soil_moisture_estimate ?? 50))}%` }}
+                  />
+                </div>
+                <p className="mt-2.5 text-xs text-emerald-300 flex items-center gap-1.5">
+                  <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
+                  <span>{weather?.soil_moisture_status || "Optimal Field Capacity"}</span>
                 </p>
               </div>
-            ) : (
-              <div className="rounded-2xl border border-white/[0.12] bg-white/[0.06] p-6 sm:p-8 shadow-2xl shadow-black/20 backdrop-blur-xl">
-                {/* Star rating */}
-                <div className="mb-5 text-center">
-                  <p className="text-xs text-gray-500 mb-2 uppercase tracking-wider">
-                    {lang === "sw" ? "Kiwango" : "Rating"}
+
+              {/* Card 2: Wholesale Benchmark */}
+              <div className="glass-panel p-5 relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-mono uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                    <Database className="h-4 w-4" /> Wholesale Benchmark
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-mono">KAMIS Median</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold font-mono text-cyan-300">
+                    KES {prices?.wholesale_price_ksh?.toLocaleString() ?? "N/A"}
+                  </span>
+                </div>
+                <p className="mt-4 text-xs text-gray-400">
+                  Unit: <span className="text-gray-200 font-medium">{prices?.unit || "90kg Bag"}</span>
+                </p>
+                <div className="mt-1 text-[11px] text-cyan-400/80 truncate">
+                  {prices?.data_status || "Live government market bulletin"}
+                </div>
+              </div>
+
+              {/* Card 3: Retail Spread & Margin */}
+              <div className="glass-panel p-5 relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-mono uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <TrendingUp className="h-4 w-4" /> Retail Arbitrage Spread
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-mono">Market Premium</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-bold font-mono text-amber-300">
+                    KES {prices?.retail_price_ksh?.toLocaleString() ?? "N/A"}
+                  </span>
+                  {prices?.profit_margin_estimate !== undefined && (
+                    <span className="text-xs font-mono font-semibold text-emerald-400">
+                      +{prices.profit_margin_estimate}%
+                    </span>
+                  )}
+                </div>
+                <p className="mt-4 text-xs text-gray-400">
+                  Farm gate estimate: <span className="text-gray-200 font-mono font-medium">KES {prices?.farm_gate_price_ksh?.toLocaleString() ?? "N/A"}</span>
+                </p>
+                <div className="mt-1 text-[11px] text-amber-400/80">
+                  Estimated trader gross margin
+                </div>
+              </div>
+
+              {/* Card 4: Local Weather & Rain Risk */}
+              <div className="glass-panel p-5 relative overflow-hidden">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-mono uppercase tracking-wider text-blue-400 flex items-center gap-1.5">
+                    <Cloud className="h-4 w-4" /> Weather: {weather?.location || location}
+                  </span>
+                  <span className="text-[10px] text-gray-500 font-mono">{weather?.current_temp ?? "--"}°C</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-white capitalize">{weather?.condition || "Sunny / Clear"}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-400 font-mono">
+                  <div className="flex items-center gap-1">
+                    <Droplets className="h-3.5 w-3.5 text-blue-400" />
+                    <span>{weather?.humidity ?? "--"}% Hum</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Wind className="h-3.5 w-3.5 text-gray-400" />
+                    <span>{weather?.wind_kph ?? "--"} kph</span>
+                  </div>
+                </div>
+                {weather?.soil_temperature_c !== undefined && (
+                  <p className="mt-2 text-[11px] text-gray-400">
+                    Soil Temp: <span className="text-white font-mono">{weather.soil_temperature_c.toFixed(1)}°C</span>
                   </p>
-                  <div className="flex items-center justify-center gap-1">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        onClick={() => setFbRating(star)}
-                        onMouseEnter={() => setFbHoverRating(star)}
-                        onMouseLeave={() => setFbHoverRating(0)}
-                        className="p-1 transition-transform hover:scale-110"
-                      >
-                        <Star
-                          className={`h-7 w-7 transition-colors ${
-                            star <= (fbHoverRating || fbRating)
-                              ? "text-amber-400 fill-amber-400"
-                              : "text-gray-600"
-                          }`}
-                        />
-                      </button>
-                    ))}
+                )}
+              </div>
+            </div>
+
+            {/* Split Charts: 14-Day Outlook & National Benchmark Comparison */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 14-Day Forecast Chart */}
+              <div className="glass-panel p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <Cloud className="h-4 w-4 text-cyan-400" /> 14-Day Precipitation & Temperature
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">High / Low Temperature (°C) vs Expected Rainfall (mm)</p>
+                  </div>
+                </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={weather?.forecast ?? []}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#16291e" />
+                      <XAxis dataKey="date" fontSize={11} stroke="#64748b" tickFormatter={(v) => v.slice(5)} />
+                      <YAxis yAxisId="left" stroke="#10b981" fontSize={11} />
+                      <YAxis yAxisId="right" orientation="right" stroke="#06b6d4" fontSize={11} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Line yAxisId="left" type="monotone" dataKey="max" stroke="#10b981" strokeWidth={2} name="Max Temp (°C)" dot={false} />
+                      <Line yAxisId="left" type="monotone" dataKey="min" stroke="#34d399" strokeWidth={1.5} name="Min Temp (°C)" dot={false} />
+                      <Line yAxisId="right" type="monotone" dataKey="rain_mm" stroke="#06b6d4" strokeWidth={2} name="Rainfall (mm)" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Price Breakdown Bar Chart */}
+              <div className="glass-panel p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <BarChart3 className="h-4 w-4 text-emerald-400" /> Price Structure Breakdown
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Comparison across Farm Gate, Wholesale & Retail Tiers (KES)</p>
+                  </div>
+                </div>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={priceBarData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#16291e" />
+                      <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                      <YAxis stroke="#64748b" fontSize={11} />
+                      <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(16,185,129,0.05)" }} />
+                      <Bar dataKey="price" radius={[8, 8, 0, 0]} name="Price (KES)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Agronomic AI Advisory Card */}
+            <div className="glass-panel p-6 border-l-4 border-l-emerald-500">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm uppercase tracking-wider">
+                  <Sparkles className="h-4 w-4 text-amber-400" /> Mkulima Intelligence Advisory
+                </div>
+                <span className="text-[11px] font-mono text-gray-500">Grounded in Open-Meteo & KAMIS Data</span>
+              </div>
+              <div className="text-sm text-gray-300 leading-relaxed whitespace-pre-line bg-emerald-950/20 p-4 rounded-xl border border-emerald-900/30">
+                {advice || "Synthesizing soil moisture dynamics and market pricing advisory..."}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 2: Live Markets Table */}
+        {activeTab === "markets" && (
+          <div className="space-y-4">
+            <div className="glass-panel p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                    <Database className="h-4 w-4 text-emerald-400" /> Verified Market Comparison
+                  </h3>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Live county-level price surveys for <span className="text-emerald-400 font-semibold">{crop}</span> ({prices?.unit})
+                  </p>
+                </div>
+                {/* Search Bar */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-gray-400" />
+                  <input
+                    type="text"
+                    value={marketSearch}
+                    onChange={(e) => setMarketSearch(e.target.value)}
+                    placeholder="Search market or county..."
+                    className="w-full pl-9 pr-3 py-1.5 rounded-lg glass-input text-xs"
+                  />
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-emerald-950/60 text-gray-400 font-mono uppercase">
+                      <th className="py-2.5 px-3">Market Hub</th>
+                      <th className="py-2.5 px-3">County</th>
+                      <th className="py-2.5 px-3 text-right">Wholesale Price</th>
+                      <th className="py-2.5 px-3 text-right">Retail Price</th>
+                      <th className="py-2.5 px-3">Sources</th>
+                      <th className="py-2.5 px-3 text-right">Survey Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-emerald-950/40">
+                    {filteredMarkets.length > 0 ? (
+                      filteredMarkets.map((m, idx) => (
+                        <tr key={idx} className="hover:bg-emerald-950/30 transition">
+                          <td className="py-2.5 px-3 font-semibold text-white flex items-center gap-1.5">
+                            {m.is_key_market && <span className="h-1.5 w-1.5 rounded-full bg-amber-400" title="Key Hub" />}
+                            <span>{m.market}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-400">{m.county || "Kenya"}</td>
+                          <td className="py-2.5 px-3 text-right font-mono text-cyan-300">
+                            {m.wholesale_price ? `KES ${m.wholesale_price.toLocaleString()}` : "—"}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-mono text-emerald-400 font-semibold">
+                            {m.retail_price ? `KES ${m.retail_price.toLocaleString()}` : "—"}
+                          </td>
+                          <td className="py-2.5 px-3 text-gray-500 font-mono text-[10px]">
+                            {m.sources?.join(", ") || "KAMIS / Mkulima"}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-gray-500 font-mono text-[10px]">
+                            {m.date || "Recent"}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={6} className="py-8 text-center text-gray-500">
+                          No market surveys match your filter.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Spatial Arbitrage Matrix */}
+        {activeTab === "arbitrage" && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Best Market to Sell */}
+              <div className="glass-panel p-5 border-l-4 border-l-emerald-500">
+                <span className="text-xs font-mono uppercase tracking-wider text-emerald-400 flex items-center gap-1.5 mb-1">
+                  <ArrowUpRight className="h-4 w-4" /> Recommended Destination Hub (Top Price)
+                </span>
+                <p className="text-2xl font-bold font-mono text-white">
+                  {analysisData?.recommendation?.best_sell_market || "Nairobi Marikiti"}
+                </p>
+                <p className="text-lg font-mono text-emerald-400 mt-1">
+                  KES {analysisData?.recommendation?.best_sell_price?.toLocaleString() || "4,800"} / {prices?.unit}
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Highest wholesale margin recorded across Kenya today.
+                </p>
+              </div>
+
+              {/* Cheapest Sourcing Hub */}
+              <div className="glass-panel p-5 border-l-4 border-l-cyan-500">
+                <span className="text-xs font-mono uppercase tracking-wider text-cyan-400 flex items-center gap-1.5 mb-1">
+                  <ArrowDownRight className="h-4 w-4" /> Production & Farm Hub (Lowest Buy Price)
+                </span>
+                <p className="text-2xl font-bold font-mono text-white">
+                  {analysisData?.recommendation?.cheapest_buy_market || "Kitale Wholesale"}
+                </p>
+                <p className="text-lg font-mono text-cyan-400 mt-1">
+                  KES {analysisData?.recommendation?.cheapest_buy_price?.toLocaleString() || "3,200"} / {prices?.unit}
+                </p>
+                <p className="text-xs text-gray-400 mt-2">
+                  Source harvest directly from agricultural production belt to maximize spread.
+                </p>
+              </div>
+            </div>
+
+            {/* Spatial Spread Bar Chart */}
+            {analysisData?.predictions && analysisData.predictions.length > 0 && (
+              <div className="glass-panel p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-violet-400" /> Regional Price Arbitrage Comparison
+                    </h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Local Market Price vs National Benchmark Median</p>
+                  </div>
+                </div>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={analysisData.predictions.map((p) => ({
+                        market: p.market,
+                        Local: p.current_price,
+                        Benchmark: p.predicted_price,
+                      }))}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#16291e" />
+                      <XAxis dataKey="market" stroke="#64748b" fontSize={11} angle={-25} textAnchor="end" height={50} />
+                      <YAxis stroke="#64748b" fontSize={11} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Bar dataKey="Local" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Local Price (KES)" />
+                      <Bar dataKey="Benchmark" fill="#06b6d4" radius={[6, 6, 0, 0]} name="Benchmark Median (KES)" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 4: Interactive Profit & Logistics Simulator */}
+        {activeTab === "calculator" && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Input Controls */}
+            <div className="glass-panel p-6 space-y-5 lg:col-span-1">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-emerald-400" /> Dispatch Simulator
+              </h3>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Estimate net profits for consolidating and transporting crops between production hubs and urban centers.
+              </p>
+
+              <div>
+                <label className="text-xs text-gray-300 font-medium block mb-1">
+                  Quantity ({prices?.unit || "Units"})
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={calcQuantity}
+                  onChange={(e) => setCalcQuantity(Number(e.target.value) || 1)}
+                  className="w-full rounded-lg glass-input px-3 py-2 text-sm font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-300 font-medium block mb-1">
+                  Freight & Logistics Cost (KES)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="500"
+                  value={calcTransportCost}
+                  onChange={(e) => setCalcTransportCost(Number(e.target.value) || 0)}
+                  className="w-full rounded-lg glass-input px-3 py-2 text-sm font-mono"
+                />
+                <span className="text-[10px] text-gray-500 mt-1 block">Trucking, loading & county cess fees</span>
+              </div>
+
+              <div className="pt-2 border-t border-emerald-950/60">
+                <div className="flex justify-between text-xs py-1">
+                  <span className="text-gray-400">Sourcing Hub:</span>
+                  <span className="text-cyan-400 font-mono font-medium">{analysisData?.recommendation?.cheapest_buy_market || "Kitale"}</span>
+                </div>
+                <div className="flex justify-between text-xs py-1">
+                  <span className="text-gray-400">Target Hub:</span>
+                  <span className="text-emerald-400 font-mono font-medium">{analysisData?.recommendation?.best_sell_market || "Nairobi"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Simulated Ledger & Returns */}
+            <div className="glass-panel p-6 lg:col-span-2 flex flex-col justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-amber-400" /> Projected Yield Ledger
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-[#0b1410] p-4 rounded-xl border border-emerald-900/40">
+                    <span className="text-[11px] text-gray-400 uppercase font-mono block">Procurement Cost</span>
+                    <span className="text-xl font-bold font-mono text-cyan-300 mt-1 block">
+                      KES {calcResults.totalPurchaseCost.toLocaleString()}
+                    </span>
+                    <span className="text-[10px] text-gray-500">@ KES {calcResults.buyPrice.toLocaleString()} / unit</span>
+                  </div>
+
+                  <div className="bg-[#0b1410] p-4 rounded-xl border border-emerald-900/40">
+                    <span className="text-[11px] text-gray-400 uppercase font-mono block">Gross Dispatch Revenue</span>
+                    <span className="text-xl font-bold font-mono text-white mt-1 block">
+                      KES {calcResults.grossRevenue.toLocaleString()}
+                    </span>
+                    <span className="text-[10px] text-gray-500">@ KES {calcResults.sellPrice.toLocaleString()} / unit</span>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border ${calcResults.netProfit >= 0 ? "bg-emerald-950/30 border-emerald-500/40" : "bg-red-950/30 border-red-500/40"}`}>
+                    <span className="text-[11px] text-gray-400 uppercase font-mono block">Estimated Net Profit</span>
+                    <span className={`text-xl font-bold font-mono mt-1 block ${calcResults.netProfit >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      KES {calcResults.netProfit.toLocaleString()}
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-mono">ROI: {calcResults.roi}%</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                <div className="p-4 rounded-xl bg-emerald-950/20 border border-emerald-900/30 text-xs text-gray-300 leading-relaxed">
+                  <p className="font-semibold text-emerald-400 mb-1 flex items-center gap-1.5">
+                    <Info className="h-4 w-4" /> Strategy Brief:
+                  </p>
+                  Transporting {calcQuantity} units of {crop} from {analysisData?.recommendation?.cheapest_buy_market || "Production Hub"} to {analysisData?.recommendation?.best_sell_market || "Nairobi"} yields a gross margin of KES {(calcResults.grossRevenue - calcResults.totalPurchaseCost).toLocaleString()}. After factoring in KES {calcTransportCost.toLocaleString()} logistics, your estimated net return is KES {calcResults.netProfit.toLocaleString()}.
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={openChat}
+                  className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-semibold shadow transition"
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  <span>Discuss route with Copilot AI</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Community Feedback Section */}
+        <section className="glass-panel p-6 sm:p-8 mt-12 border-t border-emerald-900/40">
+          <div className="max-w-2xl mx-auto text-center">
+            <h3 className="text-lg font-bold text-white mb-1">Kenyan Farmer & Trader Feedback</h3>
+            <p className="text-xs text-gray-400 mb-6">
+              Share localized market ground truth, price corrections, or feature requests.
+            </p>
+
+            {fbSent ? (
+              <div className="bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 p-4 rounded-xl text-xs font-semibold flex items-center justify-center gap-2">
+                <CheckCircle className="h-4 w-4" /> Feedback received. Asante sana!
+              </div>
+            ) : (
+              <div className="space-y-3 text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <input
                     type="text"
                     value={fbName}
                     onChange={(e) => setFbName(e.target.value)}
-                    placeholder={lang === "sw" ? "Jina lako *" : "Your Name *"}
-                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
+                    placeholder="Your Name / Organization"
+                    className="glass-input rounded-lg px-3 py-2 text-xs"
                   />
                   <input
                     type="email"
                     value={fbEmail}
                     onChange={(e) => setFbEmail(e.target.value)}
-                    placeholder={lang === "sw" ? "Barua pepe (hiari)" : "Email (optional)"}
-                    className="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
+                    placeholder="Phone or Email (Optional)"
+                    className="glass-input rounded-lg px-3 py-2 text-xs"
                   />
                 </div>
                 <textarea
                   value={fbMessage}
                   onChange={(e) => setFbMessage(e.target.value)}
-                  placeholder={lang === "sw" ? "Andika maoni yako hapa... *" : "Write your feedback here... *"}
-                  rows={4}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 resize-none"
+                  placeholder="Tell us about price shifts in your local market or report discrepancies..."
+                  rows={3}
+                  className="glass-input w-full rounded-lg px-3 py-2 text-xs"
                 />
-                {fbError && <p className="mt-2 text-xs text-red-400">{fbError}</p>}
-                <div className="mt-4 flex justify-end">
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setFbRating(s)}
+                        className={`p-1 ${s <= fbRating ? "text-amber-400" : "text-gray-600"}`}
+                      >
+                        <Star className="h-4 w-4 fill-current" />
+                      </button>
+                    ))}
+                  </div>
                   <button
-                    onClick={submitFeedback}
-                    disabled={fbLoading || !fbMessage.trim() || !fbName.trim()}
-                    className="flex items-center gap-2 rounded-xl bg-amber-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-amber-500/20 transition hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={async () => {
+                      if (!fbName.trim() || !fbMessage.trim()) return;
+                      setFbLoading(true);
+                      try {
+                        await axios.post(`${API_URL}/comments`, {
+                          name: fbName.trim(),
+                          email: fbEmail.trim(),
+                          message: fbMessage.trim(),
+                          rating: fbRating,
+                        });
+                        setFbSent(true);
+                        setFbName("");
+                        setFbEmail("");
+                        setFbMessage("");
+                        setTimeout(() => setFbSent(false), 5000);
+                      } catch {
+                        // ignore error
+                      } finally {
+                        setFbLoading(false);
+                      }
+                    }}
+                    disabled={fbLoading || !fbName.trim() || !fbMessage.trim()}
+                    className="rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-semibold transition disabled:opacity-50"
                   >
-                    {fbLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {lang === "sw" ? "Tuma Maoni" : "Send Feedback"}
+                    {fbLoading ? "Sending..." : "Submit Report"}
                   </button>
                 </div>
               </div>
             )}
           </div>
         </section>
+      </main>
 
-        {/* Footer */}
-        <footer className="agri-footer relative mt-0 overflow-hidden">
-          <div className="absolute inset-0 z-0">
-            <img
-              src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=1200&q=60"
-              alt=""
-              className="h-full w-full object-cover opacity-20"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-gray-950/90 to-gray-950/70" />
-          </div>
-          <div className="relative z-10 border-t border-white/5">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10">
-              <div className="flex flex-col items-center gap-6">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-                    <Leaf className="h-4 w-4 text-emerald-400" />
-                  </div>
-                  <span className="text-sm font-bold text-gray-300">kilimo.hub@ke</span>
-                </div>
-                <p className="text-center text-xs text-gray-500">
-                  {t("footerCredits", lang)}
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-gray-500">
-                  <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/5">
-                    <Database className="h-3 w-3" />
-                    KAMIS + Mkulima Online + Open-Meteo Agro
-                  </span>
-                  <span className="flex items-center gap-1.5 rounded-full bg-white/5 px-3 py-1 border border-white/5">
-                    <User className="h-3 w-3" />
-                    Created by Paul N Magima
-                  </span>
-                </div>
-                <p className="text-center text-[10px] text-gray-600">
-                  &copy; {new Date().getFullYear()} kilimo.hub@ke. All rights reserved.
-                </p>
-              </div>
-            </div>
-          </div>
-        </footer>
-      </div>
-
-      {/* ================================================================ */}
-      {/*  CHAT PANEL                                                       */}
-      {/* ================================================================ */}
+      {/* Floating Copilot AI Modal */}
       {chatOpen && (
-        <div className="fixed inset-0 z-40 flex justify-end">
-          {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setChatOpen(false)} />
-
-          {/* Panel */}
-          <div className="agri-chat-panel relative flex h-full w-full max-w-full sm:max-w-[400px] flex-col border-l shadow-2xl backdrop-blur-xl">
-            {/* Chat Header */}
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="glass-panel w-full max-w-lg flex flex-col h-[560px] border border-emerald-500/40 shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="p-4 border-b border-emerald-950/60 bg-emerald-950/30 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10">
-                  <MessageCircle className="h-4 w-4 text-emerald-400" />
-                </div>
-                <h3 className="text-sm font-semibold text-white">{t("chatTitle", lang)}</h3>
+                <Sparkles className="h-4 w-4 text-amber-400" />
+                <span className="font-bold text-sm text-white">Mkulima Copilot AI</span>
               </div>
-              <button
-                onClick={() => setChatOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-white/10 hover:text-white"
-              >
+              <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white p-1">
                 <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Messages */}
-            <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-              {chatMessages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 text-xs leading-relaxed">
+              {chatMessages.map((m, idx) => (
+                <div key={idx} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-                      msg.role === "user"
-                        ? "rounded-br-md bg-emerald-600 text-white"
-                        : "rounded-bl-md border border-white/10 bg-white/5 text-gray-200"
+                    className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
+                      m.role === "user"
+                        ? "bg-emerald-600 text-white rounded-br-none"
+                        : "bg-emerald-950/60 border border-emerald-900/40 text-gray-200 rounded-bl-none"
                     }`}
                   >
-                    {msg.content}
+                    {m.content}
                   </div>
                 </div>
               ))}
-
-              {/* Loading indicator */}
               {chatLoading && (
                 <div className="flex justify-start">
-                  <div className="rounded-2xl rounded-bl-md border border-white/10 bg-white/5 px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:0ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:150ms]" />
-                      <span className="h-2 w-2 animate-bounce rounded-full bg-gray-400 [animation-delay:300ms]" />
-                    </div>
+                  <div className="bg-emerald-950/40 border border-emerald-900/30 px-3 py-2 rounded-xl text-gray-400 flex items-center gap-2">
+                    <Loader2 className="h-3 w-3 animate-spin text-emerald-400" />
+                    <span>Consulting agricultural telemetry...</span>
                   </div>
                 </div>
               )}
               <div ref={chatEndRef} />
             </div>
 
-            {/* Input */}
-            <div className="border-t border-white/10 p-4">
-              <div className="flex items-center gap-2">
+            {/* Input bar */}
+            <div className="p-3 border-t border-emerald-950/60 bg-[#0a120e]">
+              <div className="flex gap-2">
                 <input
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={handleChatKeyDown}
-                  placeholder={t("chatPlaceholder", lang)}
-                  className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50"
+                  onKeyDown={(e) => e.key === "Enter" && sendChat()}
+                  placeholder="Ask a question..."
+                  className="flex-1 rounded-lg glass-input px-3 py-2 text-xs"
                 />
                 <button
                   onClick={sendChat}
                   disabled={chatLoading || !chatInput.trim()}
-                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-lg shadow-emerald-500/20 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs font-semibold disabled:opacity-50 transition"
                 >
-                  {chatLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Send className="h-4 w-4" />
-                  )}
+                  <Send className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
@@ -1651,107 +1198,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ================================================================ */}
-      {/*  ADMIN PANEL                                                      */}
-      {/* ================================================================ */}
-      {adminOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setAdminOpen(false)} />
-          <div className="agri-admin-panel relative flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border shadow-2xl backdrop-blur-xl mx-4">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-              <div className="flex items-center gap-2">
-                <Lock className="h-4 w-4 text-amber-400" />
-                <h3 className="text-sm font-semibold text-white">Admin Panel — Feedback</h3>
-              </div>
-              <button
-                onClick={() => { setAdminOpen(false); setAdminAuthed(false); setAdminPass(""); }}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition hover:bg-white/10 hover:text-white"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Auth gate */}
-            {!adminAuthed ? (
-              <div className="p-6">
-                <p className="text-xs text-gray-500 mb-3">Enter the admin access token to view feedback.</p>
-                <div className="flex gap-2">
-                  <input
-                    type="password"
-                    value={adminPass}
-                    onChange={(e) => setAdminPass(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") fetchComments(); }}
-                    placeholder="Admin access token"
-                    className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-gray-500 outline-none transition focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50"
-                  />
-                  <button
-                    onClick={fetchComments}
-                    disabled={adminLoading || !adminPass}
-                    className="rounded-xl bg-amber-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-500 disabled:opacity-50"
-                  >
-                    {adminLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Login"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Comments list */
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs text-gray-500">
-                    {adminComments.length} feedback {adminComments.length === 1 ? "entry" : "entries"} received
-                  </p>
-                  <button
-                    onClick={fetchComments}
-                    disabled={adminLoading}
-                    className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-gray-400 transition hover:bg-white/10"
-                  >
-                    <RefreshCw className={`h-3 w-3 ${adminLoading ? "animate-spin" : ""}`} />
-                    Refresh
-                  </button>
-                </div>
-                {adminComments.length === 0 ? (
-                  <div className="text-center py-12">
-                    <MessageSquare className="h-10 w-10 text-gray-700 mx-auto mb-3" />
-                    <p className="text-sm text-gray-500">No feedback submitted yet.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {adminComments.map((c) => (
-                      <div key={c.id} className="rounded-xl border border-white/8 bg-white/[0.03] p-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10">
-                              <User className="h-3.5 w-3.5 text-emerald-400" />
-                            </div>
-                            <div>
-                              <p className="text-sm font-medium text-white">{c.name}</p>
-                              {c.email && <p className="text-[10px] text-gray-500">{c.email}</p>}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {c.rating > 0 && (
-                              <div className="flex items-center gap-0.5">
-                                {[1, 2, 3, 4, 5].map((s) => (
-                                  <Star key={s} className={`h-3 w-3 ${s <= c.rating ? "text-amber-400 fill-amber-400" : "text-gray-700"}`} />
-                                ))}
-                              </div>
-                            )}
-                            <span className="text-[10px] text-gray-600">
-                              {new Date(c.timestamp).toLocaleDateString("en-KE", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-line">{c.message}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Footer */}
+      <footer className="mt-12 border-t border-emerald-950/60 py-6 text-center text-xs text-gray-500 font-mono">
+        <p>AGRIQUANT KENYA • Real-time KAMIS, Mkulima Online, WeatherAPI & Open-Meteo Integration</p>
+        <p className="mt-1 text-[11px] text-gray-600">Built for Kenyan Agribusinesses, Farmers & Freight Operators</p>
+      </footer>
     </div>
   );
 }
